@@ -17,3 +17,35 @@ Real voice:
 
 Needs a human (not verifiable here): Android speed/smoothness at 1–2×, background playback with screen locked,
 lock-screen controls, how voice + highlight feel, real Google sign-in/Picker/sync, PWA install.
+
+## 2026-11-01 — Cross-origin isolation for the WASM voice + Google sign-in page
+
+- App pages are served with `COOP: same-origin` + `COEP: credentialless` (vercel.json, Vite plugin for dev/preview);
+  `/google.html` is excluded and now hosts Google sign-in + Picker (popup, BroadcastChannel back to the app).
+- Voice worker sets ORT `numThreads = min(4, cores − 1)` when isolated; `?debug=1` shows `isolated: yes · threads: N`.
+- Prefetch depth 3 → 8 while the page is hidden (screen locked).
+
+RTF, headless Chromium, WASM q8, no GPU, 4 cores (shared with other jobs, so ±0.3 noise), app worker path,
+`npm run bench:browser` (6 sentences, average of the player's per-sentence RTF):
+
+| config | run 1 | run 2 |
+|---|---|---|
+| before (no isolation, 1 thread; measured on the old build) | 3.26 | — |
+| not isolated, 1 thread (`LUMEN_NO_COI=1 npm run preview`) | 3.28 | 3.32 |
+| isolated, 2 threads | 2.42 | 2.39 |
+| **isolated, 3 threads (default on 4 cores)** | **2.14** | **2.20** |
+| isolated, 4 threads | 2.75 | 1.93 |
+
+→ about **−34 %** RTF on this machine (3.3 → 2.2). 4 threads on 4 cores is best when the machine is idle but worst
+under load (UI/audio compete), hence `cores − 1`. Still RTF > 1 here, so no-GPU playback in this container is not
+gapless; WebGPU stays the fast path and phone numbers still need measuring on a device.
+
+Verified under COEP (Playwright): model + voice downloads from huggingface.co and the ORT runtime from jsDelivr,
+pdf.js worker (same-origin; PDF e2e tests run isolated), Drive REST (`fetch` with Bearer → readable 401 from googleapis.com, so CORS works),
+token revoke (`no-cors`). New e2e `google.spec.ts` (Google scripts + Drive API stubbed): app isolated / sign-in page not,
+connect via popup, GIS popup handle alive on the sign-in page but severed from the app page, Drive import via Picker,
+closing the window cancels. `npm run check`: 40 unit tests; `npx playwright test`: 27 passed.
+
+Needs a human: real Google sign-in + Picker + sync through `/google.html` on desktop Chrome and Android Chrome
+(popup → tab behaviour, window closing itself, returning to the app), the Vercel headers on the deployed site
+(`crossOriginIsolated` in DevTools), and phone RTF with threads.

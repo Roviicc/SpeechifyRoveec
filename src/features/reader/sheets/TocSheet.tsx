@@ -1,10 +1,10 @@
 import { useEffect, useMemo } from 'react'
-import { Sheet } from '../../../ui/Sheet'
-import { formatMinutes } from '../../../ui/controls'
-import { session } from '../../../app/session'
-import { usePlayback } from '../../../store/playback'
-import { sectionEndSentence, type BookIndex } from '../../../engine/doc/bookIndex'
-import type { BookDoc } from '../../../engine/doc/types'
+import { Sheet } from '@/ui/Sheet'
+import { formatMinutes } from '@/ui/controls'
+import { session } from '@/session/session'
+import { usePlayback } from '@/state/playback'
+import { sectionEndSentence, type BookIndex } from '@/engine/book/bookIndex'
+import type { BookDoc } from '@/engine/book/types'
 
 export function TocSheet({ open, onClose, doc, index }: { open: boolean; onClose: () => void; doc: BookDoc; index: BookIndex | null }) {
   const section = usePlayback((s) => s.section)

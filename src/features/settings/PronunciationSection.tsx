@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
-import { useSettings } from '../../store/settings'
+import { useSettings } from '@/state/settings'
 import { Group } from './Group'
 
 export function PronunciationSection() {

@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { ChevronRight } from 'lucide-react'
-import { usePlayback } from '../../store/playback'
-import { Segmented } from '../../ui/controls'
-import { effectiveVoice, getAutoVoice, getEnginePref, getVoicePref, setAutoVoice, setEnginePref, setVoicePref, type EnginePref, type VoicePref } from '../../engine/tts/engineChoice'
-import { session } from '../../app/session'
-import { navigate } from '../../app/router'
+import { usePlayback } from '@/state/playback'
+import { Segmented } from '@/ui/controls'
+import { effectiveVoice, getAutoVoice, getEnginePref, getVoicePref, setAutoVoice, setEnginePref, setVoicePref, type EnginePref, type VoicePref } from '@/engine/voice/choice/engineChoice'
+import { session } from '@/session/session'
+import { navigate } from '@/app/router'
 import { Group } from './Group'
 
 function choiceNote(pref: VoicePref, auto: 'kokoro' | 'piper' | null): string {

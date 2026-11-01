@@ -1,6 +1,6 @@
-import type { LumenDB } from '../data/db'
-import type { Settings } from '../store/settings'
-import type { DriveClient } from './driveClient'
+import type { LumenDB } from '@/data/db'
+import type { Settings } from '@/state/settings'
+import type { DriveClient } from '@/sync/drive/client'
 import { emptySyncDoc, mergeSyncDocs, parseSyncDoc, sameSyncContent, type SyncDoc } from './merge'
 
 export const SYNC_FILE = 'sync.json'

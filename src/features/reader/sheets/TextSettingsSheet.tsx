@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
-import { Sheet } from '../../../ui/Sheet'
-import { Segmented, Slider } from '../../../ui/controls'
-import { useSettings, type FontFamily, type Margin } from '../../../store/settings'
+import { Sheet } from '@/ui/Sheet'
+import { Segmented, Slider } from '@/ui/controls'
+import { useSettings, type FontFamily, type Margin } from '@/state/settings'
 import { ThemePicker } from './ThemePicker'
 
 function Row({ label, children }: { label: string; children: ReactNode }) {

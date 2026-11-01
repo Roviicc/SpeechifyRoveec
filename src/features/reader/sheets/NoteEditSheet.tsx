@@ -1,5 +1,5 @@
-import { Sheet } from '../../../ui/Sheet'
-import type { HighlightRow } from '../../../data/db'
+import { Sheet } from '@/ui/Sheet'
+import type { HighlightRow } from '@/data/db'
 
 /** "Add a note" sheet shown after highlighting with the note button. */
 export function NoteEditSheet({

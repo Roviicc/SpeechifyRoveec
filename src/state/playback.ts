@@ -1,0 +1,50 @@
+import { create } from 'zustand'
+import type { PlayerState } from '@/engine/voice/player/player'
+
+export interface ModelStatus {
+  status: 'idle' | 'downloading' | 'loading' | 'ready' | 'error'
+  fraction: number | null
+  loadedBytes: number
+  totalBytes: number
+  error?: string
+}
+
+export const IDLE_MODEL: ModelStatus = { status: 'idle', fraction: null, loadedBytes: 0, totalBytes: 0 }
+
+export interface SleepTimer {
+  mode: 'off' | 'minutes' | 'chapter'
+  endsAt?: number
+  minutes?: number
+}
+
+export interface PlaybackState {
+  bookId: string | null
+  title: string
+  cover?: string
+  state: PlayerState
+  index: number
+  count: number
+  section: number
+  speed: number
+  model: ModelStatus
+  device?: string
+  /** worker is cross-origin isolated (WASM threads possible) */
+  isolated?: boolean
+  /** WASM threads used by the voice */
+  threads?: number
+  rtf?: number
+  sleep: SleepTimer
+  error?: string
+}
+
+export const usePlayback = create<PlaybackState>()(() => ({
+  bookId: null,
+  title: '',
+  state: 'idle',
+  index: 0,
+  count: 0,
+  section: 0,
+  speed: 1,
+  model: { ...IDLE_MODEL },
+  sleep: { mode: 'off' },
+}))

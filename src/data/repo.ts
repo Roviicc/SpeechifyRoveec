@@ -1,7 +1,7 @@
 import { db, type BookRow, type BookmarkRow, type HighlightRow, type Locator, type ProgressRow } from './db'
 import { uid } from './util'
-import type { BookDoc } from '../engine/doc/types'
-import { DOC_VERSION } from '../engine/doc/types'
+import type { BookDoc } from '@/engine/book/types'
+import { DOC_VERSION } from '@/engine/book/types'
 
 type Listener = () => void
 const listeners = new Set<Listener>()
@@ -70,9 +70,6 @@ export async function recordDeletedBook(id: string) {
   await db.settings.put({ key: 'deletedBooks', value: map, updatedAt: Date.now() })
 }
 
-export async function getDeletedBooks(): Promise<Record<string, number>> {
-  return ((await db.settings.get('deletedBooks'))?.value as Record<string, number> | undefined) ?? {}
-}
 
 // ---------- progress ----------
 export async function getProgress(bookId: string) {

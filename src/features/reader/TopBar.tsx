@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Bookmark, ChevronDown, FileImage, FileText, Type } from 'lucide-react'
-import { navigate } from '../../app/router'
-import { IconButton } from '../../ui/controls'
+import { navigate } from '@/app/router'
+import { IconButton } from '@/ui/controls'
 
 /** Reader top bar: back, title, Aa, bookmark, PDF Original/Text toggle and the "•••" menu (passed as `menu`). */
 export function TopBar({

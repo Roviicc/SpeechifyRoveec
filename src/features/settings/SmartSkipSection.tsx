@@ -1,5 +1,5 @@
-import { useSettings } from '../../store/settings'
-import { Toggle } from '../../ui/controls'
+import { useSettings } from '@/state/settings'
+import { Toggle } from '@/ui/controls'
 import { Group } from './Group'
 
 export function SmartSkipSection() {

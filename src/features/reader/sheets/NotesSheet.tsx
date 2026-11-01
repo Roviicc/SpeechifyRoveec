@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { Bookmark, Trash2 } from 'lucide-react'
-import { Sheet } from '../../../ui/Sheet'
-import { Segmented } from '../../../ui/controls'
-import type { BookDoc } from '../../../engine/doc/types'
-import type { BookmarkRow, HighlightRow } from '../../../data/db'
-import { deleteBookmark, deleteHighlight, updateHighlight } from '../../../data/repo'
+import { Sheet } from '@/ui/Sheet'
+import { Segmented } from '@/ui/controls'
+import type { BookDoc } from '@/engine/book/types'
+import type { BookmarkRow, HighlightRow } from '@/data/db'
+import { deleteBookmark, deleteHighlight, updateHighlight } from '@/data/repo'
 import { HIGHLIGHT_COLORS } from './constants'
 
 type Loc = { section: number; block: number; offset: number }

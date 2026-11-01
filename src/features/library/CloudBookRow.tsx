@@ -1,6 +1,6 @@
 import { CloudDownload } from 'lucide-react'
-import { Thumb } from '../../ui/controls'
-import type { SyncBook } from '../../sync/merge'
+import { Thumb } from '@/ui/controls'
+import type { SyncBook } from '@/sync/merge'
 
 /** A book that exists in the synced library (on Google Drive) but not on this device. */
 export function CloudBookRow({ book, busy, onDownload }: { book: SyncBook; busy: string | null; onDownload: () => void }) {

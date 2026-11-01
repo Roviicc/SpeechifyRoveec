@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { driveConfigured, disconnect, getToken, isConnected } from '../../sync/google'
-import { syncNow, useSync } from '../../sync/syncService'
-import { toast } from '../../ui/toast'
+import { driveConfigured, disconnect, getToken, isConnected } from '@/sync/drive/google'
+import { syncNow, useSync } from '@/sync/syncService'
+import { toast } from '@/ui/toast'
 import { Group } from './Group'
 
 function syncStatusText(sync: ReturnType<typeof useSync.getState>): string {

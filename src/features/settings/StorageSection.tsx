@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { audioStore } from '../../data/audioCache'
-import { toast } from '../../ui/toast'
+import { audioStore } from '@/data/audioCache'
+import { toast } from '@/ui/toast'
 import { Group } from './Group'
 
 function mb(bytes: number) {

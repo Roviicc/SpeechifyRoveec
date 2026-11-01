@@ -1,5 +1,5 @@
 import { X } from 'lucide-react'
-import { IconButton } from '../../ui/controls'
+import { IconButton } from '@/ui/controls'
 
 /** "Continue from <chapter>?" banner over the top of the text. */
 export function ResumeBanner({ sectionTitle, onContinue, onStartOver }: { sectionTitle: string; onContinue: () => void; onStartOver: () => void }) {

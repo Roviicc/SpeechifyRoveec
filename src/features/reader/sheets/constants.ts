@@ -1,4 +1,4 @@
-import type { HighlightColor } from '../../../data/db'
+import type { HighlightColor } from '@/data/db'
 
 export const SPEED_PRESETS = [1, 1.5, 2, 2.5]
 

@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Moon } from 'lucide-react'
-import { Sheet } from '../../../ui/Sheet'
-import { formatMinutes } from '../../../ui/controls'
-import { session } from '../../../app/session'
-import { usePlayback } from '../../../store/playback'
+import { Sheet } from '@/ui/Sheet'
+import { formatMinutes } from '@/ui/controls'
+import { session } from '@/session/session'
+import { usePlayback } from '@/state/playback'
 
 type SleepChoice = 'off' | 'chapter' | number
 

@@ -1,5 +1,5 @@
-import { useSettings } from '../../store/settings'
-import { ThemePicker } from '../reader/sheets'
+import { useSettings } from '@/state/settings'
+import { ThemePicker } from '@/features/reader/sheets'
 import { Group } from './Group'
 
 export function AppearanceSection() {

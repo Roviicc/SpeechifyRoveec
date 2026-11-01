@@ -1,4 +1,4 @@
-import type { AudioStore } from '../engine/tts/player'
+import type { AudioStore } from '@/engine/voice/player/player'
 import { db, type LumenDB } from './db'
 import { hashText } from './util'
 

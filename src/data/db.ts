@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie'
-import type { BookDoc } from '../engine/doc/types'
+import type { BookDoc } from '@/engine/book/types'
 
 export interface BookRow {
   id: string

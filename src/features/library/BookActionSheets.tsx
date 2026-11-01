@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import type { BookRow } from '../../data/db'
-import { deleteBook, renameBook } from '../../data/repo'
-import { Sheet } from '../../ui/Sheet'
-import { session } from '../../app/session'
-import { syncSoon } from '../../sync/syncService'
+import type { BookRow } from '@/data/db'
+import { deleteBook, renameBook } from '@/data/repo'
+import { Sheet } from '@/ui/Sheet'
+import { session } from '@/session/session'
+import { syncSoon } from '@/sync/syncService'
 
 /** The options sheet of a library row (Rename, Delete) and the rename / delete-confirmation sheets it opens. */
 export function BookActionSheets({ menuFor, onCloseMenu }: { menuFor: BookRow | null; onCloseMenu: () => void }) {

@@ -1,11 +1,11 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
-import { App } from './app/App'
-import { session } from './app/session'
-import { startSyncLoop } from './sync/syncService'
-import { importBook } from './features/import/importBook'
-import { navigate } from './app/router'
+import { App } from '@/app/App'
+import { session } from '@/session/session'
+import { startSyncLoop } from '@/sync/syncService'
+import { importBook } from '@/features/library/import/importBook'
+import { navigate } from '@/app/router'
 
 // create the playback session before React renders (its constructor updates stores)
 session()
@@ -34,4 +34,8 @@ lq?.setConsumer(async (params) => {
 })
 
 // test hook (used by Playwright e2e)
-;(window as unknown as { __lumen: unknown }).__lumen = { session, importBook }
+// Test/diagnostics hook, only in dev builds or when a test/debug flag is in the URL (?tts=… or ?debug)
+const params = new URLSearchParams(location.search)
+if (import.meta.env.DEV || params.has('tts') || params.has('debug')) {
+  ;(window as unknown as { __lumen: unknown }).__lumen = { session, importBook }
+}

@@ -1,9 +1,9 @@
 import { create } from 'zustand'
-import { db } from '../data/db'
-import { notifyChange } from '../data/repo'
-import { settingsSnapshot, useSettings } from '../store/settings'
-import { DriveAuthError, GoogleDriveClient } from './driveClient'
-import { driveConfigured, forgetToken, getToken, hasValidToken, isConnected, NeedsSignIn } from './google'
+import { db } from '@/data/db'
+import { notifyChange } from '@/data/repo'
+import { settingsSnapshot, useSettings } from '@/state/settings'
+import { DriveAuthError, GoogleDriveClient } from '@/sync/drive/client'
+import { driveConfigured, forgetToken, getToken, hasValidToken, isConnected, NeedsSignIn } from '@/sync/drive/google'
 import { syncOnce, type SettingsBridge } from './syncCore'
 
 export interface SyncStatus {

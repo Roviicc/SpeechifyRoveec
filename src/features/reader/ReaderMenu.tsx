@@ -1,5 +1,5 @@
 import { MoreHorizontal, Moon, NotebookPen, Search } from 'lucide-react'
-import { IconButton } from '../../ui/controls'
+import { IconButton } from '@/ui/controls'
 import type { MenuPanel } from './panels'
 
 const ITEMS: Array<{ k: MenuPanel; icon: React.ReactNode; label: string }> = [

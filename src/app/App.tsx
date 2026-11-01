@@ -1,16 +1,16 @@
 import { useEffect, useState } from 'react'
 import { Library, Pause, Play, Plus, Settings as SettingsIcon } from 'lucide-react'
 import { navigate, useRoute } from './router'
-import { session } from './session'
-import { LibraryScreen } from '../features/library/LibraryScreen'
-import { ReaderScreen } from '../features/reader/ReaderScreen'
-import { SettingsScreen } from '../features/settings/SettingsScreen'
-import { TtsTestScreen } from '../features/ttstest/TtsTestScreen'
-import { ImportSheet } from '../features/import/ImportSheet'
-import { usePlayback } from '../store/playback'
-import { applyTheme, useSettings } from '../store/settings'
-import { Thumb } from '../ui/controls'
-import { useToasts } from '../ui/toast'
+import { session } from '@/session/session'
+import { LibraryScreen } from '@/features/library/LibraryScreen'
+import { ReaderScreen } from '@/features/reader/ReaderScreen'
+import { SettingsScreen } from '@/features/settings/SettingsScreen'
+import { VoiceTestScreen } from '@/features/voice-test/VoiceTestScreen'
+import { ImportSheet } from '@/features/library/import/ImportSheet'
+import { usePlayback } from '@/state/playback'
+import { applyTheme, useSettings } from '@/state/settings'
+import { Thumb } from '@/ui/controls'
+import { useToasts } from '@/ui/toast'
 
 function MiniPlayer() {
   const { bookId, title, cover, state } = usePlayback()
@@ -111,7 +111,7 @@ export function App() {
         {route.name === 'library' && <LibraryScreen onImport={() => setImportOpen(true)} />}
         {route.name === 'settings' && <SettingsScreen />}
         {route.name === 'reader' && <ReaderScreen key={route.bookId} bookId={route.bookId} />}
-        {route.name === 'tts' && <TtsTestScreen />}
+        {route.name === 'tts' && <VoiceTestScreen />}
       </main>
       {withNav && (
         <>

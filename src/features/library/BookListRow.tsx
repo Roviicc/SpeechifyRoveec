@@ -1,7 +1,7 @@
 import { MoreHorizontal } from 'lucide-react'
-import { navigate } from '../../app/router'
-import type { BookRow, ProgressRow } from '../../data/db'
-import { IconButton, Thumb } from '../../ui/controls'
+import { navigate } from '@/app/router'
+import type { BookRow, ProgressRow } from '@/data/db'
+import { IconButton, Thumb } from '@/ui/controls'
 
 function relativeDay(ts: number): string {
   const d = new Date(ts)

@@ -1,5 +1,5 @@
-import type { BookmarkRow, HighlightRow, ProgressRow } from '../data/db'
-import type { Settings } from '../store/settings'
+import type { BookmarkRow, HighlightRow, ProgressRow } from '@/data/db'
+import type { Settings } from '@/state/settings'
 
 export interface SyncBook {
   id: string

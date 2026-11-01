@@ -1,7 +1,7 @@
-import { Sheet } from '../../../ui/Sheet'
-import { Slider } from '../../../ui/controls'
-import { session } from '../../../app/session'
-import { usePlayback } from '../../../store/playback'
+import { Sheet } from '@/ui/Sheet'
+import { Slider } from '@/ui/controls'
+import { session } from '@/session/session'
+import { usePlayback } from '@/state/playback'
 import { SPEED_PRESETS } from './constants'
 
 export function SpeedSheet({ open, onClose }: { open: boolean; onClose: () => void }) {

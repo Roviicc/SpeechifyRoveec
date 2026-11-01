@@ -160,16 +160,42 @@ word's share of the sentence and can drift slightly on long or number‑heavy se
 
 ```
 src/
-  app/        App shell, hash router, playback session, Media Session
-  engine/
-    text/     sentence splitter, smart skip, pronunciation, spoken text + word timing (pure, unit-tested)
-    doc/      EPUB parser, PDF extraction + layout (lines, headers/footers, paragraphs), book index
-    tts/      TtsBackend interface, Kokoro worker backend, fake backend, Player (prefetch, cache, speed)
-  data/       Dexie DB, repositories, audio cache
-  sync/       Google sign-in client (via /google.html), Drive client, FakeDrive, merge + sync
-  google/     the non-isolated sign-in page (Google Identity Services + Picker), entry of google.html
-  features/   library, import, reader (views, highlighter, auto-scroll, sheets), settings, voice test
-  ui/         shared components (Sheet, controls, toasts)
-docs/         PLAN.md, PROGRESS.md, DECISIONS.md
-tests/        unit/ (Vitest), e2e/ (Playwright), fixtures/
+  main.tsx, index.css
+  app/              App shell: App.tsx, hash router
+  session/          playback session: session.ts + sleep timer, progress saving, time estimates,
+                    voice auto-switch, model loading, indexing, lock-screen controls
+  engine/           pure logic: no React, no screens (enforced by lint)
+    text/           sentence splitter, smart skip, pronunciation, spoken text + word timing
+    book/           book model (types) + bookIndex (blocks -> sentences)
+      epub/         EPUB parser + block extraction
+      pdf/          PDF extraction, line/paragraph layout, pdf.js loader
+    voice/          speech engines
+      player/       sentence player (prefetch, cache, speed) + WAV helpers
+      kokoro/       Kokoro backend + worker (GPU -> CPU fallback chain)
+      piper/        Piper backend + worker
+      shared/       worker client/server base + message protocol
+      choice/       Auto/Natural/Fast + GPU/Processor preferences, limits
+  data/             Dexie DB, repositories, audio cache
+  sync/             merge + sync service (Drive appDataFolder)
+    drive/          Drive client, FakeDrive, Google sign-in + Picker bridge
+    signin-page/    the separate (non-isolated) Google sign-in page
+  state/            zustand stores: settings, playback
+  features/
+    library/        library screen, rows, book actions, import/
+    reader/         ReaderScreen, top bar, menu, resume banner
+      views/        reflowed text, PDF pages, EPUB images
+      highlight/    highlighter, text<->DOM mapping, auto-scroll, selection toolbar
+      player/       player bar
+      sheets/       one file per panel (speed, text, contents, sleep, search, notes)
+      hooks/        book loading, shortcuts, notes, resume offer, search hit
+    settings/       one component per settings section
+    voice-test/     voice test page
+  ui/               shared components (Sheet, controls, toasts)
+tests/
+  unit/             Vitest, mirrors src/ (engine/, session/, sync/, features/)
+  e2e/              Playwright (fake voice)
+  fixtures/         sample EPUB, text PDF, scanned PDF
+docs/               PLAN.md, PROGRESS.md, DECISIONS.md
 ```
+Imports use the `@/` alias (`@/engine/voice/player/player`). Lint rules keep `engine/` free of React and app
+layers, and keep `data/` and `sync/` free of screens.

@@ -60,3 +60,11 @@ RTF <= 0.9) and otherwise switches to Piper and remembers it (`lumen-voice-auto-
 runs slower than real time (RTF x speed > 1.3 over 4+ sentences), Auto switches to Piper mid-book without losing the place.
 Natural/Fast remain as fixed choices; picking Auto again re-tests the device. Cost: a slow device downloads Kokoro once
 before falling back.
+
+**2026-11-02 — Cleanup + folder structure.** Folders are named for what they do: `session/` (playback session split into
+small modules), `engine/{text,book,voice}` (pure logic), `state/` (stores), `sync/drive` + `sync/signin-page`, and
+`features/reader/{views,highlight,player,sheets,hooks}`. Imports use the `@/` alias. ESLint `no-restricted-imports`
+keeps `engine/` free of React/app layers and `data/` + `sync/` free of screens. Unit tests mirror `src/`.
+Kokoro and Piper share one worker client (`voice/shared/workerVoiceClient.ts`) and one worker loop (`serveVoice.ts`).
+Build: the onnxruntime `.wasm` copies Vite emits are dropped (both voices load the runtime from the transformers.js CDN
+dist, the same file for both), saving 36 MB.

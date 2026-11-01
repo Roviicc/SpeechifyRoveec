@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Play } from 'lucide-react'
-import { Sheet } from '../../../ui/Sheet'
-import type { BookIndex } from '../../../engine/doc/bookIndex'
-import type { BookDoc } from '../../../engine/doc/types'
+import { Sheet } from '@/ui/Sheet'
+import type { BookIndex } from '@/engine/book/bookIndex'
+import type { BookDoc } from '@/engine/book/types'
 
 export interface SearchHit {
   block: number

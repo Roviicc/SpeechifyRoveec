@@ -5,6 +5,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 
 const TRANSFORMERS_VERSION: string = JSON.parse(readFileSync(new URL('./node_modules/@huggingface/transformers/package.json', import.meta.url), 'utf8')).version
 
@@ -52,7 +53,10 @@ export default defineConfig({
   resolve: {
     // Piper's library imports the WASM-only onnxruntime build; use the same (WebGPU+WASM) build that Kokoro uses so
     // both voices load one shared runtime file.
-    alias: [{ find: /^onnxruntime-web\/wasm$/, replacement: 'onnxruntime-web' }],
+    alias: [
+      { find: /^onnxruntime-web\/wasm$/, replacement: 'onnxruntime-web' },
+      { find: /^@\//, replacement: fileURLToPath(new URL('./src/', import.meta.url)) },
+    ],
   },
   plugins: [
     crossOriginIsolation(),

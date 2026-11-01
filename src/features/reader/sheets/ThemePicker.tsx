@@ -1,5 +1,5 @@
-import { Segmented } from '../../../ui/controls'
-import type { Theme } from '../../../store/settings'
+import { Segmented } from '@/ui/controls'
+import type { Theme } from '@/state/settings'
 
 export function ThemePicker({ value, onChange }: { value: Theme; onChange: (t: Theme) => void }) {
   return (

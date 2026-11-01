@@ -54,3 +54,16 @@ Needs a human: real Google sign-in + Picker + sync through `/google.html` on des
 - Kokoro on GPU (WebGPU fp32): hung; no sentence finished, and the phone lagged. Auto fallback added.
 - Kokoro on processor (WASM q8, 4 threads, cross-origin isolated): RTF 8.7, unusable.
 - Piper `en_US-lessac-medium` (WASM, 4 threads): **RTF 0.42**, plays smoothly at 1x; should hold up to ~2x.
+
+## 2026-11-02 — Cleanup (steps 1–5) + folder restructure
+| | Before | After |
+|---|---|---|
+| Built app (dist) | 40 MB | 5.5 MB |
+| Main JS bundle | 546 KB | 446 KB |
+| Voice runtime downloads (Kokoro + Piper used) | 2 different files | 1 shared file |
+| Largest file | session.ts 350 / sheets.tsx 415 / ReaderScreen 389 | player.ts 465 (grouped); ReaderScreen 181; SettingsScreen 27 |
+| Unit tests | 67 | 98 |
+| E2E tests | 29 | 29 |
+Source grew from ~7.6k to ~8.2k lines: duplication removed, but splitting into small modules adds imports,
+interfaces and comments. Bug fixed on the way: saved sentence audio wasn't labelled per voice (switching voices could
+replay the other voice). Real-voice checks (Piper, Kokoro CPU, Auto -> Piper) pass after every step.

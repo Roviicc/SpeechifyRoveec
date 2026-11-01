@@ -60,17 +60,20 @@ Return: changed files, test output summary, screenshots taken, known issues, fol
 ## Codebase layout
 ```
 src/
-  app/        App shell, hash router, playback session (session.ts), Media Session
-  features/   library/ import/ reader/ (ReflowView, PdfView, PlayerBar, sheets, highlighter, autoScroll, surface) settings/ ttstest/
-  engine/
-    tts/      TtsBackend interface, KokoroBackend + worker, FakeTtsBackend, Player
-    text/     sentence splitter, smart skip, pronunciation, spoken text, word timing (pure)
-    doc/      EPUB parser, PDF extraction + layout, bookIndex (blocks -> sentences)
+  app/        App shell + router
+  session/    playback session (session.ts + sleep timer, progress, estimates, auto-switch, indexing)
+  engine/     pure logic, no React (lint-enforced)
+    text/     splitter, smart skip, pronunciation, word timing
+    book/     book model + index; epub/ and pdf/ parsers
+    voice/    player/, kokoro/, piper/, shared/ (worker client/server), choice/ (voice + device prefs)
   data/       Dexie db, repositories, audio cache
-  sync/       Google auth + Picker, Drive client, FakeDrive, merge, syncCore, syncService
+  sync/       merge + sync service; drive/ (client, FakeDrive, Google auth/Picker), signin-page/
+  state/      zustand stores (settings, playback)
+  features/   library/ (+import/), reader/ (views/, highlight/, player/, sheets/, hooks/), settings/, voice-test/
   ui/         shared components
-docs/ tests/unit/ tests/e2e/ tests/fixtures/ scripts/
+docs/ tests/unit/ (mirrors src) tests/e2e/ tests/fixtures/
 ```
+Imports use the `@/` alias.
 
 ## Testing (what agents verify themselves)
 `npm run check` = typecheck + lint + unit tests + build. Required after every task.

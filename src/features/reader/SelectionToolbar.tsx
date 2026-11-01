@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Play, StickyNote } from 'lucide-react'
 import type { TextPoint, TextSurface } from './surface'
-import { HIGHLIGHT_COLORS } from './sheets'
+import { HIGHLIGHT_COLORS } from './sheets/constants'
 import type { HighlightColor } from '../../data/db'
 
 export interface SelectionInfo {

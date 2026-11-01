@@ -22,6 +22,11 @@ describe('splitSentences', () => {
     expect(sentences('Part 2. The Return')).toEqual(['Part 2. The Return'])
   })
 
+  it('splits after "no." used as a word but keeps "No. 5" / "p. 7" references', () => {
+    expect(sentences('He said no. Then he left.')).toEqual(['He said no.', 'Then he left.'])
+    expect(sentences('See fig. 3 and no. 4 here. Then p. 7 too.')).toEqual(['See fig. 3 and no. 4 here.', 'Then p. 7 too.'])
+  })
+
   it('handles quotes, ellipses and question marks', () => {
     expect(sentences('“Is it true?” she asked. Well… maybe. Yes!')).toEqual(['“Is it true?” she asked.', 'Well… maybe.', 'Yes!'])
   })
@@ -68,6 +73,17 @@ describe('smart skip', () => {
     expect(reps).toContain('¹')
     expect(reps).toContain('12')
     expect(reps).not.toContain('3')
+  })
+
+  it('does not skip exponents, page/number references or dates in parentheses', () => {
+    for (const t of [
+      'The area is 10 m² and E = mc² holds, about 10³ km².',
+      'Prices fell (March 2020) sharply and recovered (Summer 2021) slowly.',
+      'See p.12 for details and turn to No.5 now.',
+    ])
+      expect(findInlineSkips(t, DEFAULT_SKIP).map((r) => t.slice(r.start, r.end))).toEqual([])
+    const t = 'A claim word² and more.'
+    expect(findInlineSkips(t, DEFAULT_SKIP).map((r) => t.slice(r.start, r.end))).toEqual(['²'])
   })
 
   it('respects toggles', () => {

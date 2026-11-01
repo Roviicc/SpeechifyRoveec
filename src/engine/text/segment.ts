@@ -9,6 +9,9 @@ const ABBREVIATIONS = new Set([
   'viz', 'resp', 'eq', 'eqs', 'ca', 'c',
 ])
 
+/** Abbreviations that are also ordinary words ("he said no."): only glued when a number follows. */
+const NUMBERED = new Set(['no', 'nos', 'p', 'pp', 'fig', 'figs', 'vol', 'vols', 'ch', 'chap', 'sec', 'eq', 'eqs', 'op'])
+
 let sentenceSegmenter: Intl.Segmenter | null = null
 function segmenter(): Intl.Segmenter {
   sentenceSegmenter ??= new Intl.Segmenter('en', { granularity: 'sentence' })
@@ -22,7 +25,7 @@ function trimSpan(text: string, start: number, end: number): Span | null {
 }
 
 /** True if the sentence ends with an abbreviation/initial and should be glued to the next one. */
-function endsWithAbbreviation(text: string, span: Span): boolean {
+function endsWithAbbreviation(text: string, span: Span, next: Span): boolean {
   const s = text.slice(span.start, span.end)
   if (!s.endsWith('.')) return false
   // "Chapter III." / "Part 2." / "Book IV." headings
@@ -30,6 +33,7 @@ function endsWithAbbreviation(text: string, span: Span): boolean {
   const m = /(?:^|[\s(“"'‘])([A-Za-z][A-Za-z.]*)\.$/.exec(s)
   if (!m) return false
   const word = m[1].toLowerCase()
+  if (NUMBERED.has(word)) return /^(?:\d|[IVXLCDM]{2,}\b)/.test(text.slice(next.start, next.end))
   if (ABBREVIATIONS.has(word)) return true
   // Single capital initial like "J." in "J. R. R. Tolkien"
   return /^[A-Z]$/.test(m[1])
@@ -79,7 +83,7 @@ export function splitSentences(text: string, maxLen = 400): Span[] {
     const body = text.slice(span.start, span.end)
     const startsLower = /^[a-z]/.test(body)
     const onlyPunct = !/[\p{L}\p{N}]/u.test(body)
-    if (prev && (endsWithAbbreviation(text, prev) || startsLower || onlyPunct)) {
+    if (prev && (endsWithAbbreviation(text, prev, span) || startsLower || onlyPunct)) {
       prev.end = span.end
     } else {
       merged.push({ ...span })

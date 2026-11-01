@@ -68,7 +68,6 @@ export function Slider({
   step,
   onChange,
   label,
-  thin,
   testId,
   format,
 }: {
@@ -78,7 +77,6 @@ export function Slider({
   step: number
   onChange: (v: number) => void
   label: string
-  thin?: boolean
   testId?: string
   format?: (v: number) => string
 }) {
@@ -86,7 +84,7 @@ export function Slider({
   return (
     <input
       type="range"
-      className={`slider ${thin ? 'thin' : ''}`}
+      className="slider"
       aria-label={label}
       aria-valuetext={format?.(value)}
       min={min}

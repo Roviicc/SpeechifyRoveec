@@ -3,7 +3,9 @@
 **2026-11-01 — Own EPUB parser instead of foliate-js/epub.js.** Both readers render into the app's own reflowed
 DOM (one text node per block) so highlighting, tap-to-jump, search and auto-scroll share one code path with PDF
 Text mode. Only parsing is needed, and a ~250-line JSZip + DOMParser parser (container → OPF → spine, nav/NCX TOC,
-cover, footnote refs) is smaller, testable in Vitest, and avoids iframe plumbing. Images are not shown.
+cover, footnote refs) is smaller, testable in Vitest, and avoids iframe plumbing.
+
+**Rich EPUB display (DOC_VERSION 2).** Blocks keep plain `text` (what is read and indexed) plus `marks` (italic/bold/small caps/sup/sub/code ranges), structure flags (heading level, quote, list marker, `pre` line breaks, table `cells`) and `img` blocks (zip path + alt + intrinsic size, no text, no sentences). A block renders as several elements but its `textContent` always equals `text`; ReflowSurface maps offsets across the text nodes with a running sum. List markers are CSS `::before` and table-cell separators are hidden spans, so neither breaks the invariant. Images are unzipped lazily from the stored EPUB into object URLs (revoked on unmount) when near the viewport. `<br>` becomes "\n" (rendered with pre-line); capitalised lines become separate sentences.
 
 **Highlighting uses the CSS Custom Highlight API** (Chrome 105+): no DOM mutation, cheap enough to update per frame.
 PDF Original mode highlights the transparent pdf.js text-layer spans via a block→text-item span table.

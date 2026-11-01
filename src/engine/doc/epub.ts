@@ -1,12 +1,8 @@
 import JSZip from 'jszip'
-import type { Block, BookDoc, Section, TocEntry } from './types'
+import type { BookDoc, Section, TocEntry } from './types'
+import { byLocalName, extractBlocks, imageSize, resolvePath } from './epubBlocks'
 
-const BLOCK_TAGS = new Set([
-  'address', 'article', 'aside', 'blockquote', 'body', 'caption', 'dd', 'div', 'dl', 'dt', 'figcaption', 'figure',
-  'footer', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'header', 'hr', 'li', 'main', 'nav', 'ol', 'p', 'pre', 'section',
-  'table', 'tbody', 'td', 'tfoot', 'th', 'thead', 'tr', 'ul', 'center', 'hgroup',
-])
-const SKIP_TAGS = new Set(['script', 'style', 'head', 'title', 'svg', 'math', 'noscript', 'template', 'rt', 'rp'])
+export { extractBlocks, imageSize, resolvePath } from './epubBlocks'
 
 interface ManifestItem {
   id: string
@@ -21,101 +17,6 @@ function parseXml(text: string, type: DOMParserSupportedType = 'application/xhtm
   let doc = parser.parseFromString(text, type)
   if (doc.getElementsByTagName('parsererror').length) doc = parser.parseFromString(text, 'text/html')
   return doc
-}
-
-function dirOf(path: string): string {
-  const i = path.lastIndexOf('/')
-  return i < 0 ? '' : path.slice(0, i + 1)
-}
-
-/** Resolve `href` relative to the file at `base` inside the zip. */
-export function resolvePath(base: string, href: string): string {
-  const clean = decodeURIComponent(href.split('#')[0])
-  const parts = (clean.startsWith('/') ? clean.slice(1) : dirOf(base) + clean).split('/')
-  const out: string[] = []
-  for (const p of parts) {
-    if (p === '..') out.pop()
-    else if (p !== '.' && p !== '') out.push(p)
-  }
-  return out.join('/')
-}
-
-function byLocalName(root: Document | Element, name: string): Element[] {
-  return Array.from(root.getElementsByTagName('*')).filter((e) => e.localName === name)
-}
-
-function isNoteRef(el: Element): boolean {
-  const type = `${el.getAttribute('epub:type') ?? ''} ${el.getAttributeNS('http://www.idpf.org/2007/ops', 'type') ?? ''} ${el.getAttribute('role') ?? ''}`
-  if (/noteref/.test(type)) return true
-  const text = (el.textContent ?? '').trim()
-  if (el.localName === 'sup' && text.length <= 4 && /^[[(]?[\d*†‡§a-z]{1,3}[\])]?$/i.test(text)) return true
-  if (el.localName === 'a' && (el.getAttribute('href') ?? '').includes('#') && /^\[?\d{1,3}\]?$/.test(text)) {
-    return el.parentElement?.localName === 'sup' || /^\[\d+\]$/.test(text)
-  }
-  return false
-}
-
-/** Extract readable text blocks (paragraphs/headings) from an XHTML body. */
-export function extractBlocks(body: Element): Block[] {
-  const blocks: Block[] = []
-  let buf = ''
-  let notes: Array<[number, number]> = []
-  let ids: string[] = []
-  let inNote = false
-
-  const append = (raw: string) => {
-    let t = raw.replace(/[\s\u00a0]+/g, ' ')
-    if (!buf || buf.endsWith(' ')) t = t.replace(/^ /, '')
-    buf += t
-  }
-  const flush = (kind: Block['kind']) => {
-    const text = buf.replace(/ $/, '')
-    if (/[\p{L}\p{N}]/u.test(text)) {
-      const b: Block = { text, kind }
-      const n = notes.filter(([s]) => s < text.length).map(([s, e]) => [s, Math.min(e, text.length)] as [number, number])
-      if (n.length) b.notes = n
-      if (ids.length) b.ids = ids
-      blocks.push(b)
-      ids = []
-    }
-    buf = ''
-    notes = []
-  }
-  const walk = (el: Element, kind: Block['kind']) => {
-    for (const node of Array.from(el.childNodes)) {
-      if (node.nodeType === 3 || node.nodeType === 4) {
-        append((node as Text).data)
-        continue
-      }
-      if (node.nodeType !== 1) continue
-      const child = node as Element
-      const tag = child.localName.toLowerCase()
-      if (SKIP_TAGS.has(tag)) continue
-      const id = child.getAttribute('id')
-      if (id) ids.push(id)
-      if (BLOCK_TAGS.has(tag)) {
-        const childKind: Block['kind'] = /^h[1-6]$/.test(tag) || kind === 'h' ? 'h' : 'p'
-        flush(kind)
-        walk(child, childKind)
-        flush(childKind)
-      } else if (tag === 'br') {
-        append(' ')
-      } else if (!inNote && isNoteRef(child)) {
-        const start = buf.length
-        inNote = true
-        walk(child, kind)
-        inNote = false
-        if (buf.length > start) notes.push([start, buf.length])
-      } else if (tag === 'img') {
-        // images are not read
-      } else {
-        walk(child, kind)
-      }
-    }
-  }
-  walk(body, 'p')
-  flush('p')
-  return blocks
 }
 
 export interface ParsedEpub {
@@ -214,8 +115,18 @@ export async function parseEpub(data: ArrayBuffer | Uint8Array, fallbackTitle = 
     }
     const xhtml = parseXml(text)
     const body = byLocalName(xhtml, 'body')[0] ?? xhtml.documentElement
-    const blocks = extractBlocks(body)
+    const blocks = extractBlocks(body, { base: item.path })
     if (!blocks.length) continue
+    // intrinsic image sizes, so the layout doesn't shift when images load
+    for (const b of blocks) {
+      if (b.kind !== 'img' || !b.src || b.src.startsWith('data:') || (b.w && b.h)) continue
+      const f = zip.file(b.src)
+      const size = f ? imageSize(await f.async('uint8array')) : null
+      if (size && size.w > 0 && size.h > 0) {
+        b.w = size.w
+        b.h = size.h
+      }
+    }
     sectionByPath.set(item.path, sections.length)
     sections.push({ title: '', blocks })
   }

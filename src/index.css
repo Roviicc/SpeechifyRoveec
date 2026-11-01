@@ -120,6 +120,144 @@ button {
   font-size: 1.25em;
   line-height: 1.3;
   margin: 1.4em 0 0.6em;
+  text-wrap: balance;
+}
+.reader-text .blk-h1 {
+  font-size: 1.5em;
+  line-height: 1.25;
+  margin-top: 1.6em;
+}
+.reader-text .blk-h3 {
+  font-size: 1.08em;
+  margin: 1.2em 0 0.5em;
+}
+.reader-text section > .blk-h:first-child {
+  margin-top: 0.6em;
+}
+/* inline formatting (EPUB marks) */
+.reader-text .m-i {
+  font-style: italic;
+}
+.reader-text .m-b {
+  font-weight: 700;
+}
+.reader-text .m-sc {
+  font-variant: small-caps;
+  letter-spacing: 0.02em;
+}
+.reader-text .m-sup,
+.reader-text .m-sub {
+  font-size: 0.72em;
+  line-height: 0;
+  vertical-align: super;
+}
+.reader-text .m-sub {
+  vertical-align: sub;
+}
+.reader-text .m-code {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.88em;
+}
+/* structure */
+.reader-text .blk-quote {
+  border-inline-start: 3px solid var(--border);
+  padding-inline-start: 0.9em;
+  color: color-mix(in srgb, var(--text) 85%, var(--bg));
+}
+.reader-text .blk-li {
+  position: relative;
+  margin-bottom: 0.45em;
+}
+.reader-text .blk-li::before {
+  content: attr(data-li);
+  position: absolute;
+  inset-inline-end: 100%;
+  padding-inline-end: 0.45em;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.reader-text .blk-lines {
+  white-space: pre-line;
+}
+.reader-text .blk-pre {
+  white-space: pre-wrap;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.82em;
+  line-height: 1.45;
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 0.7em 0.9em;
+}
+.reader-text .blk-row {
+  display: flex;
+  gap: 0.25em 1em;
+  margin: 0;
+  padding: 0.35em 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9em;
+  line-height: 1.4;
+}
+.reader-text .blk-row + :not(.blk-row) {
+  margin-top: 0.9em;
+}
+.reader-text .blk-row .cell {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.reader-text .blk-row .cell-sep {
+  display: none;
+}
+.reader-text .blk-cap {
+  font-size: 0.85em;
+  color: var(--muted);
+  text-align: center;
+}
+/* images (never read aloud) */
+.reader-text .blk-img {
+  --img-max-h: 70vh;
+  margin: 1.2em 0;
+  display: flex;
+  justify-content: center;
+}
+.reader-text .img-box {
+  display: block;
+  max-width: 100%;
+  min-height: 2em;
+  border-radius: 6px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.reader-text .img-box:not([style*='aspect-ratio']) {
+  min-width: 40%;
+}
+.reader-text .img-box.img-loaded {
+  background: #fff;
+  min-height: 0;
+  min-width: 0;
+}
+.reader-text .img-box img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-height: var(--img-max-h);
+  object-fit: contain;
+}
+.reader-text .img-box:not([style*='aspect-ratio']) img {
+  width: auto;
+  max-width: 100%;
+  height: auto;
+}
+.reader-text .img-box.img-failed::after {
+  content: attr(data-alt);
+  display: block;
+  padding: 0.6em 0.9em;
+  color: var(--muted);
+  font-size: 0.85em;
+  font-style: italic;
+}
+[data-theme='dark'] .reader-text .img-box img {
+  filter: brightness(0.9);
 }
 .reader-text .blk-skip {
   color: var(--skipped);

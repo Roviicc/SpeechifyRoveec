@@ -42,7 +42,18 @@ export function caretFromPoint(x: number, y: number): { node: Node; offset: numb
   return r ? { node: r.startContainer, offset: r.startOffset } : null
 }
 
-/** Reflowed text: one element per block, holding a single text node. */
+/** All text nodes under `el`, in document order (their concatenation is `el.textContent`). */
+export function textNodes(el: Node): Text[] {
+  const out: Text[] = []
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) out.push(n as Text)
+  return out
+}
+
+/**
+ * Reflowed text: one element per block whose `textContent` equals the block text. The text may be split
+ * over several text nodes (inline formatting spans, table cells), so offsets are mapped with a running sum.
+ */
 export class ReflowSurface implements TextSurface {
   dimSkipped = true
   private els = new Map<number, HTMLElement>()
@@ -52,12 +63,27 @@ export class ReflowSurface implements TextSurface {
 
   rangesFor(block: number, start: number, end: number): Range[] {
     const el = this.els.get(block)
-    const node = el?.firstChild
-    if (!node || node.nodeType !== Node.TEXT_NODE) return []
-    const len = (node as Text).length
+    if (!el) return []
+    const nodes = textNodes(el)
+    if (!nodes.length) return []
+    if (end < start) end = start
+    // start prefers the beginning of the next node at a boundary, end prefers the end of the previous one
+    let pos = 0
+    let s: { node: Text; offset: number } | null = null
+    let e: { node: Text; offset: number } | null = null
+    for (const n of nodes) {
+      const len = n.length
+      if (!s && start < pos + len) s = { node: n, offset: start - pos }
+      if (s && !e && end <= pos + len) e = { node: n, offset: Math.max(end - pos, s.node === n ? s.offset : 0) }
+      if (s && e) break
+      pos += len
+    }
+    const last = nodes[nodes.length - 1]
+    s ??= { node: last, offset: last.length }
+    e ??= { node: last, offset: last.length }
     const r = document.createRange()
-    r.setStart(node, Math.min(start, len))
-    r.setEnd(node, Math.min(end, len))
+    r.setStart(s.node, s.offset)
+    r.setEnd(e.node, e.offset)
     return [r]
   }
 
@@ -65,7 +91,14 @@ export class ReflowSurface implements TextSurface {
     const b = toTextBoundary(node, offset)
     const el = (b.node.nodeType === Node.TEXT_NODE ? b.node.parentElement : (b.node as Element))?.closest<HTMLElement>('[data-b]')
     if (!el) return null
-    return { block: Number(el.dataset.b), offset: b.node.parentElement === el ? b.offset : 0 }
+    const nodes = textNodes(el)
+    if (!nodes.length) return null // images: nothing to read or select
+    let pos = 0
+    for (const n of nodes) {
+      if (n === b.node) return { block: Number(el.dataset.b), offset: pos + Math.min(b.offset, n.length) }
+      pos += n.length
+    }
+    return { block: Number(el.dataset.b), offset: 0 }
   }
 
   anchorFor(block: number) {

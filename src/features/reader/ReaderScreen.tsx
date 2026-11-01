@@ -264,7 +264,7 @@ export function ReaderScreen({ bookId }: { bookId: string }) {
           ) : mode === 'original' && file ? (
             <PdfView file={file} index={index} scrollEl={container} onSurface={setSurface} onUpdated={sync.onSurfaceUpdated} />
           ) : (
-            <ReflowView index={index} titles={doc.sections.map((s) => s.title)} onSurface={setSurface} />
+            <ReflowView index={index} titles={doc.sections.map((s) => s.title)} onSurface={setSurface} imagesFrom={doc.type === 'epub' ? bookId : undefined} />
           )}
         </div>
 

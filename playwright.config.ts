@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test'
 
-const PORT = 4179
+const PORT = Number(process.env.E2E_PORT ?? 4179)
 
 export default defineConfig({
   testDir: 'tests/e2e',
@@ -20,6 +20,7 @@ export default defineConfig({
     command: `npx vite --port ${PORT} --strictPort`,
     url: `http://localhost:${PORT}`,
     reuseExistingServer: true,
-    env: { VITE_TTS: 'fake' },
+    // fake Google config so the Drive UI is enabled; Google's scripts + API are stubbed in google.spec.ts
+    env: { VITE_TTS: 'fake', VITE_GOOGLE_CLIENT_ID: '123456789012-e2e.apps.googleusercontent.com', VITE_GOOGLE_API_KEY: 'e2e-key' },
   },
 })

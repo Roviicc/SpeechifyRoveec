@@ -64,7 +64,9 @@ export class Player {
   private readonly backend: TtsBackend
   private readonly store?: AudioStore
   private readonly audio: AudioLike
-  private readonly prefetchDepth: number
+  private prefetchDepth: number
+  /** largest depth ever used: audio already generated within it is kept even after the depth drops again */
+  private retainDepth: number
   private readonly createUrl: (b: Blob) => string
   private readonly revokeUrl: (u: string) => void
   private ready = new Map<number, Chunk>()
@@ -82,6 +84,7 @@ export class Player {
     this.backend = opts.backend
     this.store = opts.store
     this.prefetchDepth = opts.prefetch ?? 3
+    this.retainDepth = this.prefetchDepth
     this.createUrl = opts.createUrl ?? ((b) => URL.createObjectURL(b))
     this.revokeUrl = opts.revokeUrl ?? ((u) => URL.revokeObjectURL(u))
     this.audio = opts.audio ?? new Audio()
@@ -208,13 +211,32 @@ export class Player {
     return job
   }
 
+  /** How many sentences ahead to generate. */
+  get prefetchAhead(): number {
+    return this.prefetchDepth
+  }
+
+  /**
+   * Change how many sentences ahead are generated (e.g. deeper while the screen is locked, when the browser
+   * may throttle the page). Raising it while playing starts the extra generation right away.
+   */
+  setPrefetchDepth(n: number) {
+    n = Math.max(0, Math.floor(n))
+    if (n === this.prefetchDepth) return
+    const deeper = n > this.prefetchDepth
+    this.prefetchDepth = n
+    this.retainDepth = Math.max(this.retainDepth, n)
+    if (deeper && this.source && this.isActive) this.prefetch(this.index)
+  }
+
   private prefetch(from: number) {
     if (!this.source) return
     const last = Math.min(this.source.count - 1, from + this.prefetchDepth)
     for (let j = from + 1; j <= last; j++) this.ensure(j).catch(() => {})
-    // forget audio we have moved past
+    // forget audio we have moved past (or that is far ahead, e.g. after a jump back)
+    const keepTo = from + this.retainDepth
     for (const [k, c] of this.ready) {
-      if (k < from - 1 || k > last) {
+      if (k < from - 1 || k > keepTo) {
         this.revokeUrl(c.url)
         this.ready.delete(k)
       }

@@ -35,7 +35,7 @@ class FakeAudio implements AudioLike {
 
 const texts = ['One sentence.', 'Two sentences here.', 'Three.', 'Four is longer than the others.', 'Five.', 'Six.', 'Seven.']
 
-function setup(store?: AudioStore) {
+function setup(store?: AudioStore, list: string[] = texts) {
   const backend = new FakeTtsBackend()
   const audio = new FakeAudio()
   let n = 0
@@ -51,7 +51,7 @@ function setup(store?: AudioStore) {
     },
     revokeUrl: () => {},
   })
-  player.setSource({ bookId: 'b', count: texts.length, text: (i) => texts[i] })
+  player.setSource({ bookId: 'b', count: list.length, text: (i) => list[i] })
   return { player, backend, audio }
 }
 
@@ -169,6 +169,55 @@ describe('Player', () => {
     await vi.advanceTimersByTimeAsync(1000)
     await flush()
     expect(player.state).toBe('ended')
+  })
+
+  it('prefetches deeper while hidden and keeps that audio when the depth drops again', async () => {
+    const many = Array.from({ length: 14 }, (_, i) => `Sentence number ${i + 1}.`)
+    const { player, backend } = setup(undefined, many)
+    player.play()
+    await flush()
+    expect(backend.calls).toEqual(many.slice(0, 4))
+
+    // screen locked: generate 8 ahead right away
+    player.setPrefetchDepth(8)
+    await flush()
+    expect(player.prefetchAhead).toBe(8)
+    expect(backend.calls).toEqual(many.slice(0, 9))
+
+    // visible again: back to 3 ahead, but already generated audio is not thrown away
+    player.setPrefetchDepth(3)
+    await vi.advanceTimersByTimeAsync(FakeTtsBackend.durationFor(many[0]) * 1000 + 10)
+    await flush()
+    expect(player.index).toBe(1)
+    expect(player.durationOf(8)).not.toBeNull()
+    expect(backend.calls).toEqual(many.slice(0, 9))
+  })
+
+  it('does not prefetch when the depth is raised while paused', async () => {
+    const many = Array.from({ length: 14 }, (_, i) => `Sentence number ${i + 1}.`)
+    const { player, backend } = setup(undefined, many)
+    player.setPrefetchDepth(8)
+    await flush()
+    expect(backend.calls).toEqual([])
+    player.play()
+    await flush()
+    expect(backend.calls).toEqual(many.slice(0, 9))
+  })
+})
+
+describe('Session prefetch while hidden', () => {
+  it('raises the prefetch depth when the page is hidden and restores it when visible', async () => {
+    const { session, PREFETCH_HIDDEN, PREFETCH_VISIBLE } = await import('../../src/app/session')
+    const s = session()
+    const setVisibility = (v: DocumentVisibilityState) => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => v })
+      document.dispatchEvent(new Event('visibilitychange'))
+    }
+    expect(s.player.prefetchAhead).toBe(PREFETCH_VISIBLE)
+    setVisibility('hidden')
+    expect(s.player.prefetchAhead).toBe(PREFETCH_HIDDEN)
+    setVisibility('visible')
+    expect(s.player.prefetchAhead).toBe(PREFETCH_VISIBLE)
   })
 })
 

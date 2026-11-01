@@ -18,6 +18,12 @@ async function pickDevice(): Promise<{ device: 'webgpu' | 'wasm'; dtype: 'fp32' 
   return { device: 'wasm', dtype: 'q8' }
 }
 
+/** `?threads=N` overrides the WASM thread count (for benchmarking); only effective when cross-origin isolated. */
+function requestedThreads(): number | undefined {
+  const n = Number(new URLSearchParams(globalThis.location?.search ?? '').get('threads'))
+  return Number.isInteger(n) && n > 0 ? n : undefined
+}
+
 /** Kokoro-82M running in a dedicated Web Worker (WebGPU fp32, or WASM q8 fallback). */
 export class KokoroBackend implements TtsBackend {
   info: TtsInfo | null = null
@@ -80,7 +86,7 @@ export class KokoroBackend implements TtsBackend {
         }
       }
       worker.onerror = (e) => reject(new Error(e.message || 'Voice worker failed to start'))
-      this.send({ type: 'init', ...choice })
+      this.send({ type: 'init', ...choice, threads: requestedThreads() })
     })
   }
 

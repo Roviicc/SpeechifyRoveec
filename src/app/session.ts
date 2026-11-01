@@ -21,6 +21,10 @@ export interface OpenBook {
 
 type IndexListener = (index: BookIndex) => void
 
+/** Sentences generated ahead while the app is visible / hidden (screen locked, in the background). */
+export const PREFETCH_VISIBLE = 3
+export const PREFETCH_HIDDEN = 8
+
 /** The single playback session: one Player, the open book and its sentence index. */
 class Session {
   readonly backend: TtsBackend
@@ -34,7 +38,7 @@ class Session {
 
   constructor() {
     this.backend = createBackend()
-    this.player = new Player({ backend: this.backend, store: audioStore, prefetch: 3 })
+    this.player = new Player({ backend: this.backend, store: audioStore, prefetch: PREFETCH_VISIBLE })
     this.player.setSpeed(useSettings.getState().speed)
     usePlayback.setState({ speed: this.player.speed })
 
@@ -80,9 +84,14 @@ class Session {
       }
     })
     if (typeof document !== 'undefined') {
-      document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'hidden') void this.saveNow()
-      })
+      const onVisibility = () => {
+        const hidden = document.visibilityState === 'hidden'
+        // screen locked / app in background: the browser may throttle us, so build a bigger audio buffer
+        this.player.setPrefetchDepth(hidden ? PREFETCH_HIDDEN : PREFETCH_VISIBLE)
+        if (hidden) void this.saveNow()
+      }
+      document.addEventListener('visibilitychange', onVisibility)
+      if (document.visibilityState === 'hidden') onVisibility()
     }
   }
 
@@ -109,7 +118,12 @@ class Session {
         }),
       )
       .then((info) => {
-        usePlayback.setState({ device: `${info.device} / ${info.dtype}`, model: { ...usePlayback.getState().model, status: 'ready' } })
+        usePlayback.setState({
+          device: `${info.device} / ${info.dtype}`,
+          isolated: info.isolated,
+          threads: info.threads,
+          model: { ...usePlayback.getState().model, status: 'ready' },
+        })
         void navigator.storage?.persist?.()
       })
       .catch((e: Error) => {

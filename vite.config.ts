@@ -1,11 +1,37 @@
 /// <reference types="vitest/config" />
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
+/** Pages served WITHOUT cross-origin isolation (Google sign-in + Picker need window.opener / Google iframes). */
+const NOT_ISOLATED = ['/google.html']
+
+/**
+ * Cross-origin isolation (COOP same-origin + COEP credentialless) for `vite dev` and `vite preview`,
+ * so onnxruntime-web can use WASM threads. Mirrors the headers in vercel.json.
+ */
+function crossOriginIsolation(): Plugin {
+  const handler = (req: IncomingMessage, res: ServerResponse, next: () => void) => {
+    const path = (req.url ?? '/').split(/[?#]/)[0]
+    // LUMEN_NO_COI=1 serves without isolation (to benchmark the single-threaded path)
+    if (!process.env.LUMEN_NO_COI && !NOT_ISOLATED.includes(path)) {
+      res.setHeader('Cross-Origin-Opener-Policy', 'same-origin')
+      res.setHeader('Cross-Origin-Embedder-Policy', 'credentialless')
+    }
+    next()
+  }
+  return {
+    name: 'lumen-cross-origin-isolation',
+    configureServer: (server) => void server.middlewares.use(handler),
+    configurePreviewServer: (server) => void server.middlewares.use(handler),
+  }
+}
+
 export default defineConfig({
   plugins: [
+    crossOriginIsolation(),
     react(),
     tailwindcss(),
     VitePWA({
@@ -35,8 +61,11 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,mjs,css,html,svg,png,woff2,ico}'],
+        // the sign-in page must always come from the network with its own (non-isolated) headers
+        globIgnores: ['google.html'],
         maximumFileSizeToCacheInBytes: 12 * 1024 * 1024,
         navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/google\.html/],
         runtimeCaching: [
           {
             // onnxruntime wasm (~21 MB) is too big to precache; cache it on first use
@@ -60,7 +89,11 @@ export default defineConfig({
   ],
   worker: { format: 'es' },
   optimizeDeps: { exclude: ['kokoro-js'] },
-  build: { target: 'es2022', chunkSizeWarningLimit: 4000 },
+  build: {
+    target: 'es2022',
+    chunkSizeWarningLimit: 4000,
+    rollupOptions: { input: { main: 'index.html', google: 'google.html' } },
+  },
   test: {
     environment: 'jsdom',
     include: ['tests/unit/**/*.test.ts'],

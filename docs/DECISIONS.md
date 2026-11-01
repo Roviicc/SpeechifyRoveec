@@ -24,9 +24,27 @@ so changing smart-skip or pronunciation settings (which re-index) doesn't lose t
 **Drive token in localStorage with expiry.** GIS token client has no refresh token; non-interactive syncs only run with
 a valid token, otherwise the Library shows a "tap to reconnect" chip (popups need a user gesture).
 
-**No cross-origin isolation (COOP/COEP).** Isolation lets onnxruntime-web use WASM threads: measured RTF 3.35 → 2.47
-(-26%) in headless Chromium on 4 cores. But `COOP: same-origin` breaks the Google sign-in popup. WebGPU is the primary
-fast path; revisit if a phone without WebGPU is too slow (options: host sign-in on a separate non-isolated page, or the
-Capacitor + sherpa-onnx native backend from the plan).
+**~~No cross-origin isolation (COOP/COEP).~~ Superseded 2026-11-01 — see below.** Isolation lets onnxruntime-web use
+WASM threads, but `COOP: same-origin` breaks the Google sign-in popup.
+
+**2026-11-01 — Cross-origin isolation on, Google sign-in on a separate non-isolated page.** All pages except
+`/google.html` get `COOP: same-origin` + `COEP: credentialless` (vercel.json; a Vite plugin for dev/preview), so the voice
+worker is `crossOriginIsolated` and ORT uses up to 4 WASM threads (`min(4, cores − 1)`, leaving a core for UI/audio;
+`?threads=N` overrides). `credentialless` rather than `require-corp` so huggingface.co / jsDelivr downloads need no CORP
+header. Google Identity Services needs `window.opener` on its accounts.google.com popup (COOP severs it) and the Picker is
+a docs.google.com iframe (COEP blocks it), so both run on `/google.html`, opened by the app as a popup. COOP also severs
+*our* handle to that popup (the `WindowProxy` reads as closed), so the page talks back over a same-origin
+**BroadcastChannel** (`hello` / `token` / `picked` / `error` / `closed` on `pagehide`), and the token goes to the shared
+`localStorage` as before. Alternatives considered: an iframe (would itself need COEP and still be under the app's COOP — no
+good); `COOP: same-origin-allow-popups` (does not give isolation); `Document-Isolation-Policy` (isolation without COOP, but
+Chrome-desktop-only so far — worth revisiting, it would remove the extra window); OAuth redirect flow (needs redirect URIs
+registered — more setup). Costs: one extra tap ("Continue with Google" — the GIS popup needs a user gesture on that page);
+the Picker opens without it when a token is still valid. Drive REST calls are CORS fetches with a Bearer token and work under
+COEP (verified: readable 401 from googleapis.com); token revoke is a `no-cors` POST. The sign-in page is excluded from the
+service-worker precache/navigation fallback so it always comes from the network with its own headers. Browsers without
+`credentialless` (Safari) simply aren't isolated and run single-threaded, sign-in still goes through the same page.
+
+**Deeper prefetch while hidden.** Player prefetch depth is 3 sentences while visible and 8 while `document.visibilityState
+=== 'hidden'` (session.ts), since Android may throttle a locked page; already generated audio is kept when it drops back.
 
 **Fake voice** (`?tts=fake` / `VITE_TTS=fake`): silent WAV, 60 ms/char — e2e tests never download the model.

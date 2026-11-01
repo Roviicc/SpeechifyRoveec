@@ -2,6 +2,7 @@
 export type EnginePref = 'auto' | 'gpu' | 'cpu'
 
 const PREF_KEY = 'lumen-voice-engine'
+const MODEL_KEY = 'lumen-voice-model'
 const AUTO_KEY = 'lumen-voice-auto'
 
 /** GPU must generate at least this fast (RTF = generation time / audio time) or 'auto' falls back to the CPU. */
@@ -23,6 +24,14 @@ function set(key: string, v: string | null) {
   } catch {
     /* private mode */
   }
+}
+
+/** Which voice model: Kokoro (natural, heavier) or Piper (fast). */
+export function getVoiceModel(): 'kokoro' | 'piper' {
+  return get(MODEL_KEY) === 'piper' ? 'piper' : 'kokoro'
+}
+export function setVoiceModel(m: 'kokoro' | 'piper') {
+  set(MODEL_KEY, m === 'piper' ? 'piper' : null)
 }
 
 export function getEnginePref(): EnginePref {

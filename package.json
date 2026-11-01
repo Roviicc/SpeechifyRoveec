@@ -20,6 +20,7 @@
   "dependencies": {
     "@fontsource/opendyslexic": "^5.3.0",
     "@huggingface/transformers": "^3.8.1",
+    "@mintplex-labs/piper-tts-web": "^1.0.5",
     "dexie": "^4.4.7",
     "jszip": "^3.10.2",
     "kokoro-js": "^1.2.1",

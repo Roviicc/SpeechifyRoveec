@@ -48,3 +48,9 @@ service-worker precache/navigation fallback so it always comes from the network 
 === 'hidden'` (session.ts), since Android may throttle a locked page; already generated audio is kept when it drops back.
 
 **Fake voice** (`?tts=fake` / `VITE_TTS=fake`): silent WAV, 60 ms/char — e2e tests never download the model.
+
+**2026-11-02 — Second voice: Piper (fast); Kokoro kept as the default "Natural" voice.** On the user's phone Kokoro measured
+RTF 8.7 on WASM (its GPU hung), about 9x too slow. Piper `en_US-lessac-medium` (VITS, ~63 MB, via @mintplex-labs/piper-tts-web)
+measured RTF 0.19 vs Kokoro 2.2 on the same headless machine (~11x faster). Settings -> Voice: Natural (Kokoro) / Fast (Piper);
+the app suggests Piper when Kokoro can't keep up. Audio-cache hashes include the voice, so the two never mix.
+Kokoro start-up now has time limits on every stage, with automatic fallback GPU -> threaded CPU -> single-thread CPU.

@@ -4,6 +4,8 @@ import type { TtsBackend } from '../engine/tts/types'
 import { buildBookIndex, sectionEndSentence, sentenceAt, type BookIndex } from '../engine/doc/bookIndex'
 import type { BookDoc } from '../engine/doc/types'
 import { audioStore } from '../data/audioCache'
+import { getVoiceModel } from '../engine/tts/engineChoice'
+import { toast } from '../ui/toast'
 import { saveProgress } from '../data/repo'
 import type { Locator } from '../data/db'
 import { settingsSnapshot, useSettings } from '../store/settings'
@@ -35,6 +37,8 @@ class Session {
   private lastSaved = 0
   private sleepTimeout: ReturnType<typeof setTimeout> | null = null
   private skipKey = ''
+  private slowHintShown = false
+  private rtfCount = 0
 
   constructor() {
     this.backend = createBackend()
@@ -66,7 +70,14 @@ class Session {
       const s = this.index?.sentences[index]
       if (s && duration > 0 && s.chars > 20) this.secondsPerChar = this.secondsPerChar * 0.9 + (duration / s.chars) * 0.1
     })
-    this.player.on('rtf', (rtf) => usePlayback.setState({ rtf }))
+    this.player.on('rtf', (rtf) => {
+      usePlayback.setState({ rtf })
+      // Kokoro can't keep up on this device: suggest the fast voice (once per session)
+      if (!this.slowHintShown && getVoiceModel() === 'kokoro' && ++this.rtfCount >= 4 && rtf * this.player.speed > 1.3) {
+        this.slowHintShown = true
+        toast('This device is too slow for the natural voice. For smooth playback choose Settings → Voice → Fast (Piper).', 9000)
+      }
+    })
     setupMediaSession(this)
 
     // rebuild the sentence index when smart-skip or pronunciation settings change
@@ -112,7 +123,11 @@ class Session {
     const wasActive = this.player.isActive
     this.player.pause()
     this.backend.reset?.()
+    this.player.dropAudio()
     this.player.resetRtf()
+    audioStore.voice = getVoiceModel()
+    this.slowHintShown = false
+    this.rtfCount = 0
     usePlayback.setState({ device: undefined, rtf: undefined, model: { status: 'idle', fraction: null, loadedBytes: 0, totalBytes: 0 } })
     if (wasActive) this.play()
   }

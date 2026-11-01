@@ -131,6 +131,16 @@ export class Player {
     return this.state === 'playing' || this.state === 'buffering'
   }
 
+  /** Drop all generated audio (after switching voices); playback position is kept. */
+  dropAudio() {
+    this.stopAudio()
+    this.bumpEpoch()
+    for (const c of this.ready.values()) this.revokeUrl(c.url)
+    this.ready.clear()
+    this.pendingOffset = 0
+    if (this.state !== 'idle') this.setState('paused')
+  }
+
   /** Forget speed samples (after switching the voice engine). */
   resetRtf() {
     this.rtfSamples = []

@@ -11,6 +11,7 @@ export interface TtsInfo {
   testRtf?: number
   /** set when the GPU was tried and rejected as too slow */
   gpuRejected?: { rtf: number | null }
+  voice?: VoiceModel
 }
 
 export interface LoadProgress {
@@ -48,4 +49,8 @@ export class CancelledError extends Error {
 }
 
 export const VOICE = 'af_heart'
+/** Piper voice used by the fast engine (US English, female, medium quality ~63 MB). */
+export const PIPER_VOICE = 'en_US-lessac-medium'
+
+export type VoiceModel = 'kokoro' | 'piper'
 export const MODEL_ID = 'onnx-community/Kokoro-82M-v1.0-ONNX'

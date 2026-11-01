@@ -3,7 +3,7 @@ import { ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { useSettings } from '../../store/settings'
 import { usePlayback } from '../../store/playback'
 import { Segmented, Toggle } from '../../ui/controls'
-import { getEnginePref, setEnginePref, type EnginePref } from '../../engine/tts/engineChoice'
+import { getEnginePref, getVoiceModel, setEnginePref, setVoiceModel, type EnginePref } from '../../engine/tts/engineChoice'
 import { ThemePicker } from '../reader/sheets'
 import { audioStore } from '../../data/audioCache'
 import { session } from '../../app/session'
@@ -35,6 +35,7 @@ export function SettingsScreen() {
   const [say, setSay] = useState('')
   const [connected, setConnected] = useState(isConnected())
   const [engine, setEngine] = useState<EnginePref>(getEnginePref())
+  const [voiceModel, setVoiceModelState] = useState(getVoiceModel())
 
   useEffect(() => {
     void audioStore.totalSize().then(setCacheSize)
@@ -156,11 +157,26 @@ export function SettingsScreen() {
 
       <Group title="Voice">
         <div className="py-2 text-[15px]">
-          <p>
-            Kokoro · <span className="text-muted">af_heart (American English)</span>
+          <Segmented<'kokoro' | 'piper'>
+            label="Voice"
+            value={voiceModel}
+            onChange={(v) => {
+              setVoiceModelState(v)
+              setVoiceModel(v)
+              session().switchEngine()
+            }}
+            options={[
+              { value: 'kokoro', label: 'Natural (Kokoro)' },
+              { value: 'piper', label: 'Fast (Piper)' },
+            ]}
+          />
+          <p className="mt-1.5 text-sm text-muted">
+            {voiceModel === 'kokoro'
+              ? 'Most natural. Needs a fast phone or a GPU (one-time download ~90–330 MB).'
+              : 'Lighter voice that runs smoothly on most phones (one-time download ~65 MB).'}
           </p>
           <p className="mt-1 text-sm text-muted" data-testid="voice-status">
-            {model.status === 'ready' ? `Ready on ${device}` : model.status === 'downloading' ? `Downloading… ${Math.round((model.fraction ?? 0) * 100)}%` : model.status === 'error' ? `Error: ${model.error}` : model.status === 'loading' ? 'Loading…' : 'Downloads on first play (~90–330 MB, one time)'}
+            {model.status === 'ready' ? `Ready on ${device}` : model.status === 'downloading' ? `Downloading… ${Math.round((model.fraction ?? 0) * 100)}%` : model.status === 'error' ? `Error: ${model.error}` : model.status === 'loading' ? 'Loading…' : 'Downloads on first play (one time)'}
           </p>
           {model.status !== 'ready' && model.status !== 'downloading' && (
             <button className="mt-3 h-11 w-full rounded-full bg-bg font-semibold" onClick={() => void session().ensureModel()}>
@@ -168,6 +184,7 @@ export function SettingsScreen() {
             </button>
           )}
         </div>
+        {voiceModel === 'kokoro' && (
         <div className="border-t border-line py-3">
           <div className="mb-1.5 text-[15px]">Voice engine</div>
           <Segmented<EnginePref>
@@ -186,6 +203,7 @@ export function SettingsScreen() {
           />
           <p className="mt-1.5 text-sm text-muted">Auto tests your GPU once and uses the processor if the GPU is too slow. If playback stutters or the phone lags, try Processor.</p>
         </div>
+        )}
         <button className="flex min-h-12 w-full items-center border-t border-line text-left text-[15px]" onClick={() => navigate({ name: 'tts' })} data-testid="open-tts-test">
           <span className="flex-1">Voice test page</span>
           <ChevronRight size={18} className="text-muted" />

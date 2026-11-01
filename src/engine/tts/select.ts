@@ -1,5 +1,5 @@
 import { FakeTtsBackend } from './fakeBackend'
-import { KokoroBackend } from './kokoroBackend'
+import { SwitchingBackend } from './switchingBackend'
 import type { TtsBackend } from './types'
 
 /** `?tts=fake` or VITE_TTS=fake selects the instant silent voice (used by e2e tests). */
@@ -16,5 +16,5 @@ export function isFakeVoice(): boolean {
 }
 
 export function createBackend(): TtsBackend {
-  return isFakeVoice() ? new FakeTtsBackend() : new KokoroBackend()
+  return isFakeVoice() ? new FakeTtsBackend() : new SwitchingBackend()
 }

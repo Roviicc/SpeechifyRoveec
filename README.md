@@ -7,7 +7,8 @@ imports books and syncs reading progress, bookmarks, highlights and settings bet
 
 Works in desktop Chrome and Android Chrome, and installs to the Android home screen.
 
-- **Voice:** `kokoro-js` in a Web Worker. WebGPU + fp32 when available, otherwise WASM + q8
+- **Voices:** *Natural* = Kokoro-82M; *Fast* = Piper `en_US-lessac-medium` (~11x faster, for phones where Kokoro can't keep up). Choose in Settings -> Voice.
+- **Kokoro engine:** `kokoro-js` in a Web Worker. WebGPU + fp32 when available, otherwise WASM + q8
   (multi-threaded: the app is served cross-origin isolated, see *Cross-origin isolation* below).
   The model (~90 MB q8 / ~330 MB fp32) downloads once on first play and is cached by the browser.
 - **Readers:** EPUB (reflowed text) and PDF (Original pages with pdf.js text layer, or reflowed Text mode).

@@ -45,10 +45,11 @@ class Session {
     })
     this.player.on('sentence', (i) => {
       const section = this.index?.sentences[i]?.section ?? 0
-      const prevSection = usePlayback.getState().section
+      const { section: prevSection, index: prevIndex } = usePlayback.getState()
       usePlayback.setState({ index: i, section })
       const sleep = usePlayback.getState().sleep
-      if (sleep.mode === 'chapter' && section !== prevSection && this.player.isActive) {
+      // only when reading on into the next chapter, not when the user jumps somewhere else
+      if (sleep.mode === 'chapter' && section !== prevSection && i === prevIndex + 1 && this.player.isActive) {
         // reached the next chapter: stop at its start
         this.clearSleep()
         void this.player.fadeOutAndPause(3000)
@@ -66,7 +67,12 @@ class Session {
 
     // rebuild the sentence index when smart-skip or pronunciation settings change
     this.skipKey = this.indexKey()
-    useSettings.subscribe(() => {
+    useSettings.subscribe((st) => {
+      // speed can also change from sync (settings replaced from another device)
+      if (st.speed !== this.player.speed) {
+        this.player.setSpeed(st.speed)
+        usePlayback.setState({ speed: this.player.speed })
+      }
       const key = this.indexKey()
       if (key !== this.skipKey) {
         this.skipKey = key

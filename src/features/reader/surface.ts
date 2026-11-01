@@ -123,7 +123,8 @@ export class PdfSurface implements TextSurface {
       for (const [i, bo, io, len] of b.spans ?? []) {
         if (i !== item) continue
         if (off >= io && off <= io + len) return { block: b.index, offset: bo + (off - io) }
-        best ??= { block: b.index, offset: bo }
+        // in text that is not part of the block (trimmed whitespace, a dropped hyphen): clamp
+        best ??= { block: b.index, offset: off < io ? bo : bo + len }
       }
     }
     return best

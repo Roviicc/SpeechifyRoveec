@@ -4,7 +4,7 @@ import { DexieAudioStore } from '../../src/data/audioCache'
 import { FakeDrive } from '../../src/sync/fakeDrive'
 import { syncOnce, SYNC_FILE, type SettingsBridge } from '../../src/sync/syncCore'
 import { mergeSyncDocs, emptySyncDoc } from '../../src/sync/merge'
-import { DEFAULT_SETTINGS, type Settings } from '../../src/store/settings'
+import { DEFAULT_SETTINGS, settingsSnapshot, useSettings, type Settings } from '../../src/store/settings'
 
 let n = 0
 function device() {
@@ -122,6 +122,22 @@ describe('sync between two devices', () => {
     const writes = drive.writes
     await syncOnce(a.db, drive)
     expect(drive.writes).toBe(writes)
+  })
+
+  it('a device-local setting change does not make stale synced settings win', async () => {
+    const a = device()
+    const store = useSettings.getState()
+    store.replace({ ...DEFAULT_SETTINGS, theme: 'light', updatedAt: 50 })
+    const bridge: SettingsBridge = { get: settingsSnapshot, replace: (s) => useSettings.getState().replace(s) }
+    // another device chose dark at t=100
+    const other = device()
+    other.setSettings({ theme: 'dark' }, 100)
+    await syncOnce(other.db, drive, other.bridge)
+    // this device only flips its (unsynced) PDF view mode
+    useSettings.getState().set({ pdfMode: 'text' })
+    await syncOnce(a.db, drive, bridge)
+    expect(settingsSnapshot().theme).toBe('dark')
+    expect(settingsSnapshot().pdfMode).toBe('text')
   })
 })
 

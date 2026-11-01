@@ -39,6 +39,9 @@ export const DEFAULT_SETTINGS: Settings = {
   updatedAt: 0,
 }
 
+/** Settings that stay on this device (not part of sync.json). */
+const LOCAL_ONLY = new Set<string>(['pdfMode'])
+
 interface SettingsStore extends Settings {
   set: (patch: Partial<Settings>) => void
   /** apply settings that came from sync without bumping updatedAt */
@@ -49,7 +52,9 @@ export const useSettings = create<SettingsStore>()(
   persist(
     (set) => ({
       ...DEFAULT_SETTINGS,
-      set: (patch) => set({ ...patch, updatedAt: Date.now() }),
+      // only synced fields bump updatedAt, else a device-local change (PDF view mode) would make
+      // stale synced values win the last-write-wins merge
+      set: (patch) => set(Object.keys(patch).some((k) => !LOCAL_ONLY.has(k)) ? { ...patch, updatedAt: Date.now() } : patch),
       replace: (s) => set({ ...DEFAULT_SETTINGS, ...s }),
     }),
     { name: 'lumen-settings', version: 1 },

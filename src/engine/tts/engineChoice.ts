@@ -66,3 +66,34 @@ export function chooseDevice(pref: EnginePref, gpuAvailable: boolean, remembered
   if (remembered) return { device: remembered.device, test: false }
   return { device: 'webgpu', test: true }
 }
+
+/** No message at all from the worker for this long (download or load stalled) -> give up on this attempt. */
+export const SILENCE_TIMEOUT_MS = 90_000
+/** Processor speed test must finish within this (generous: slow phones run at RTF ~3). */
+export const CPU_TEST_TIMEOUT_MS = 75_000
+
+const SINGLE_THREAD_KEY = 'lumen-voice-single-thread'
+/** Remembered when multi-threaded WASM hung on this device. */
+export function singleThreadOnly(): boolean {
+  return get(SINGLE_THREAD_KEY) === '1'
+}
+export function setSingleThreadOnly(v: boolean) {
+  set(SINGLE_THREAD_KEY, v ? '1' : null)
+}
+
+export interface Attempt {
+  device: 'webgpu' | 'wasm'
+  /** WASM thread count to force (1 = single thread); undefined = default */
+  threads?: number
+  /** reject the GPU if slower than real time */
+  speedTest: boolean
+}
+
+/** Ordered list of engines to try: each is used only if the previous one stalls (or the GPU is too slow). */
+export function attemptChain(pref: EnginePref, gpuAvailable: boolean, remembered: AutoResult | null, singleThread: boolean): Attempt[] {
+  const cpu: Attempt[] = singleThread ? [{ device: 'wasm', threads: 1, speedTest: false }] : [{ device: 'wasm', speedTest: false }, { device: 'wasm', threads: 1, speedTest: false }]
+  const pick = chooseDevice(pref, gpuAvailable, remembered)
+  if (pick.device === 'wasm') return cpu
+  if (pref === 'gpu') return [{ device: 'webgpu', speedTest: false }]
+  return [{ device: 'webgpu', speedTest: pick.test }, ...cpu]
+}

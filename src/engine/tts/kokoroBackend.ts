@@ -1,6 +1,18 @@
 import type { WorkerIn, WorkerOut } from './protocol'
 import { CancelledError, type GeneratedAudio, type LoadProgress, type TtsBackend, type TtsInfo } from './types'
-import { chooseDevice, getAutoResult, getEnginePref, GPU_MAX_RTF, GPU_TEST_TIMEOUT_MS, setAutoResult } from './engineChoice'
+import {
+  attemptChain,
+  CPU_TEST_TIMEOUT_MS,
+  getAutoResult,
+  getEnginePref,
+  GPU_MAX_RTF,
+  GPU_TEST_TIMEOUT_MS,
+  setAutoResult,
+  setSingleThreadOnly,
+  SILENCE_TIMEOUT_MS,
+  singleThreadOnly,
+  type Attempt,
+} from './engineChoice'
 
 interface Pending {
   resolve: (a: GeneratedAudio) => void
@@ -19,9 +31,19 @@ async function gpuAvailable(): Promise<boolean> {
 
 const DTYPE = { webgpu: 'fp32', wasm: 'q8' } as const
 
-class GpuTooSlow extends Error {
-  constructor(readonly rtf: number | null) {
-    super('GPU too slow')
+/** This attempt can't be used (GPU slower than real time, or the engine hung); try the next one. */
+class EngineUnusable extends Error {
+  constructor(
+    readonly reason: 'slow' | 'stuck',
+    readonly rtf: number | null = null,
+  ) {
+    super(reason === 'slow' ? 'too slow' : 'not responding')
+  }
+}
+
+class DownloadStalled extends Error {
+  constructor() {
+    super('The voice download stopped. Check your internet connection and tap Retry.')
   }
 }
 
@@ -46,37 +68,69 @@ export class KokoroBackend implements TtsBackend {
   }
 
   private async start(onProgress?: (p: LoadProgress) => void): Promise<TtsInfo> {
-    const pick = chooseDevice(getEnginePref(), await gpuAvailable(), getAutoResult())
-    if (!pick.test) return this.launch(pick.device, false, onProgress)
-    try {
-      const info = await this.launch('webgpu', true, onProgress)
-      setAutoResult({ device: 'webgpu', gpuRtf: info.testRtf ?? null, at: Date.now() })
-      return info
-    } catch (e) {
-      if (!(e instanceof GpuTooSlow)) throw e
-      // The GPU is slower than real time on this device (or hangs): use the processor instead, and remember it.
-      setAutoResult({ device: 'wasm', gpuRtf: e.rtf, at: Date.now() })
-      this.progressByFile.clear()
-      const info = await this.launch('wasm', false, onProgress)
-      info.gpuRejected = { rtf: e.rtf }
-      return info
+    const pref = getEnginePref()
+    const chain = attemptChain(pref, await gpuAvailable(), getAutoResult(), singleThreadOnly())
+    let gpuRejected: TtsInfo['gpuRejected']
+    for (let k = 0; k < chain.length; k++) {
+      const a = chain[k]
+      try {
+        const info = await this.launch(a, onProgress)
+        if (a.device === 'webgpu' && a.speedTest) setAutoResult({ device: 'webgpu', gpuRtf: info.testRtf ?? null, at: Date.now() })
+        if (a.device === 'wasm' && a.threads === 1 && k > 0 && chain[k - 1].device === 'wasm') setSingleThreadOnly(true)
+        if (gpuRejected) info.gpuRejected = gpuRejected
+        return info
+      } catch (e) {
+        if (!(e instanceof EngineUnusable) || k === chain.length - 1) {
+          this.initPromise = null
+          if (e instanceof EngineUnusable)
+            throw new Error(
+              a.device === 'webgpu' ? 'The GPU voice is not responding on this device. Set Settings → Voice engine to Processor.' : 'The voice engine is not responding on this device.',
+              { cause: e },
+            )
+          throw e
+        }
+        if (a.device === 'webgpu') {
+          gpuRejected = { rtf: e.rtf }
+          if (pref === 'auto') setAutoResult({ device: 'wasm', gpuRtf: e.rtf, at: Date.now() })
+        }
+        this.progressByFile.clear()
+      }
     }
+    throw new Error('No voice engine available')
   }
 
-  /** Start a worker on `device`. With `test`, reject with GpuTooSlow if its speed test is too slow or times out. */
-  private launch(device: 'webgpu' | 'wasm', test: boolean, onProgress?: (p: LoadProgress) => void): Promise<TtsInfo> {
+  /**
+   * Start a worker for one attempt. Rejects with EngineUnusable if it stops responding (no message for a long
+   * time after the download, or the speed test never finishes) or, with speedTest, if the GPU is slower than real time.
+   */
+  private launch(a: Attempt, onProgress?: (p: LoadProgress) => void): Promise<TtsInfo> {
     const worker = new Worker(new URL('./kokoro.worker.ts', import.meta.url), { type: 'module' })
     this.worker = worker
-    let watchdog: ReturnType<typeof setTimeout> | undefined
+    let silence: ReturnType<typeof setTimeout> | undefined
+    let testTimer: ReturnType<typeof setTimeout> | undefined
     return new Promise<TtsInfo>((resolve, reject) => {
-      const giveUp = (rtf: number | null) => {
-        clearTimeout(watchdog)
+      let settled = false
+      const stop = () => {
+        settled = true
+        clearTimeout(silence)
+        clearTimeout(testTimer)
+      }
+      const fail = (err: Error) => {
+        if (settled) return
+        stop()
         worker.terminate()
         if (this.worker === worker) this.worker = null
-        reject(new GpuTooSlow(rtf))
+        reject(err)
       }
+      const downloading = () => [...this.progressByFile.values()].some((f) => f.loaded < f.total)
+      const armSilence = () => {
+        clearTimeout(silence)
+        silence = setTimeout(() => fail(downloading() ? new DownloadStalled() : new EngineUnusable('stuck')), SILENCE_TIMEOUT_MS)
+      }
+      armSilence()
       worker.onmessage = (ev: MessageEvent<WorkerOut>) => {
         const m = ev.data
+        if (!settled) armSilence()
         switch (m.type) {
           case 'progress': {
             if (m.file && m.total) this.progressByFile.set(m.file, { loaded: m.loaded, total: m.total })
@@ -91,11 +145,13 @@ export class KokoroBackend implements TtsBackend {
           }
           case 'testing':
             onProgress?.({ fraction: null, loadedBytes: 0, totalBytes: 0, status: 'loading' })
-            if (test) watchdog = setTimeout(() => giveUp(null), GPU_TEST_TIMEOUT_MS)
+            clearTimeout(silence)
+            testTimer = setTimeout(() => fail(new EngineUnusable('stuck')), a.device === 'webgpu' ? GPU_TEST_TIMEOUT_MS : CPU_TEST_TIMEOUT_MS)
             break
           case 'ready':
-            clearTimeout(watchdog)
-            if (test && (m.info.testRtf ?? 0) > GPU_MAX_RTF) return giveUp(m.info.testRtf ?? null)
+            if (settled) return
+            if (a.speedTest && (m.info.testRtf ?? 0) > GPU_MAX_RTF) return fail(new EngineUnusable('slow', m.info.testRtf ?? null))
+            stop()
             this.info = m.info
             onProgress?.({ fraction: 1, loadedBytes: 0, totalBytes: 0, status: 'ready' })
             resolve(m.info)
@@ -117,17 +173,16 @@ export class KokoroBackend implements TtsBackend {
               const p = this.pending.get(m.reqId)
               this.pending.delete(m.reqId)
               p?.reject(new Error(m.message))
-            } else if (test) {
+            } else if (a.device === 'webgpu') {
               // a GPU that fails to run the model counts as unusable
-              giveUp(null)
+              fail(new EngineUnusable('stuck'))
             } else {
-              this.initPromise = null
-              reject(new Error(m.message))
+              fail(new Error(m.message))
             }
         }
       }
-      worker.onerror = (e) => (test ? giveUp(null) : reject(new Error(e.message || 'Voice worker failed to start')))
-      this.send({ type: 'init', device, dtype: DTYPE[device], threads: requestedThreads() })
+      worker.onerror = (e) => fail(a.device === 'webgpu' ? new EngineUnusable('stuck') : new Error(e.message || 'Voice worker failed to start'))
+      this.send({ type: 'init', device: a.device, dtype: DTYPE[a.device], threads: a.threads ?? requestedThreads() })
     })
   }
 

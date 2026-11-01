@@ -26,3 +26,18 @@ describe('voice engine choice', () => {
     expect(getAutoResult()).toBeNull()
   })
 })
+
+describe('engine attempt chain', () => {
+  it('auto: GPU (speed-tested) then threaded processor then single-thread processor', async () => {
+    const { attemptChain } = await import('../../src/engine/tts/engineChoice')
+    expect(attemptChain('auto', true, null, false)).toEqual([
+      { device: 'webgpu', speedTest: true },
+      { device: 'wasm', speedTest: false },
+      { device: 'wasm', threads: 1, speedTest: false },
+    ])
+    expect(attemptChain('cpu', true, null, false).map((a) => a.threads)).toEqual([undefined, 1])
+    expect(attemptChain('cpu', true, null, true)).toEqual([{ device: 'wasm', threads: 1, speedTest: false }])
+    expect(attemptChain('gpu', true, null, false)).toEqual([{ device: 'webgpu', speedTest: false }])
+    expect(attemptChain('auto', true, { device: 'wasm', gpuRtf: 3, at: 1 }, false)[0].device).toBe('wasm')
+  })
+})

@@ -7,6 +7,7 @@ export type WorkerIn =
 
 export type WorkerOut =
   | { type: 'progress'; file: string; loaded: number; total: number; status: string }
+  | { type: 'testing' }
   | { type: 'ready'; info: TtsInfo }
   | { type: 'audio'; reqId: number; epoch: number; wav: ArrayBuffer; duration: number; genMs: number }
   | { type: 'cancelled'; reqId: number }

@@ -131,6 +131,11 @@ export class Player {
     return this.state === 'playing' || this.state === 'buffering'
   }
 
+  /** Forget speed samples (after switching the voice engine). */
+  resetRtf() {
+    this.rtfSamples = []
+  }
+
   /** Average real-time factor (generation time / audio time) over recent sentences. */
   get rtf(): number | null {
     if (!this.rtfSamples.length) return null

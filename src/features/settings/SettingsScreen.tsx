@@ -2,7 +2,8 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { useSettings } from '../../store/settings'
 import { usePlayback } from '../../store/playback'
-import { Toggle } from '../../ui/controls'
+import { Segmented, Toggle } from '../../ui/controls'
+import { getEnginePref, setEnginePref, type EnginePref } from '../../engine/tts/engineChoice'
 import { ThemePicker } from '../reader/sheets'
 import { audioStore } from '../../data/audioCache'
 import { session } from '../../app/session'
@@ -33,6 +34,7 @@ export function SettingsScreen() {
   const [word, setWord] = useState('')
   const [say, setSay] = useState('')
   const [connected, setConnected] = useState(isConnected())
+  const [engine, setEngine] = useState<EnginePref>(getEnginePref())
 
   useEffect(() => {
     void audioStore.totalSize().then(setCacheSize)
@@ -165,6 +167,24 @@ export function SettingsScreen() {
               Download voice now
             </button>
           )}
+        </div>
+        <div className="border-t border-line py-3">
+          <div className="mb-1.5 text-[15px]">Voice engine</div>
+          <Segmented<EnginePref>
+            label="Voice engine"
+            value={engine}
+            onChange={(v) => {
+              setEngine(v)
+              setEnginePref(v)
+              session().switchEngine()
+            }}
+            options={[
+              { value: 'auto', label: 'Auto' },
+              { value: 'gpu', label: 'GPU' },
+              { value: 'cpu', label: 'Processor' },
+            ]}
+          />
+          <p className="mt-1.5 text-sm text-muted">Auto tests your GPU once and uses the processor if the GPU is too slow. If playback stutters or the phone lags, try Processor.</p>
         </div>
         <button className="flex min-h-12 w-full items-center border-t border-line text-left text-[15px]" onClick={() => navigate({ name: 'tts' })} data-testid="open-tts-test">
           <span className="flex-1">Voice test page</span>

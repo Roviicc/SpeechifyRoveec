@@ -107,6 +107,16 @@ class Session {
   }
 
   /** Make sure the voice model is loading; reports download progress to the store. */
+  /** Switch the voice engine (Auto / GPU / Processor): unload the model; it reloads on the next play. */
+  switchEngine() {
+    const wasActive = this.player.isActive
+    this.player.pause()
+    this.backend.reset?.()
+    this.player.resetRtf()
+    usePlayback.setState({ device: undefined, rtf: undefined, model: { status: 'idle', fraction: null, loadedBytes: 0, totalBytes: 0 } })
+    if (wasActive) this.play()
+  }
+
   ensureModel(): Promise<void> {
     const m = usePlayback.getState().model
     if (m.status === 'ready' || m.status === 'downloading' || m.status === 'loading') return Promise.resolve()
@@ -119,7 +129,7 @@ class Session {
       )
       .then((info) => {
         usePlayback.setState({
-          device: `${info.device} / ${info.dtype}`,
+          device: `${info.device} / ${info.dtype}${info.gpuRejected ? ` (GPU too slow${info.gpuRejected.rtf ? `: RTF ${info.gpuRejected.rtf.toFixed(1)}` : ''})` : ''}`,
           isolated: info.isolated,
           threads: info.threads,
           model: { ...usePlayback.getState().model, status: 'ready' },

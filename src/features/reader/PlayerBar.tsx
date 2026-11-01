@@ -20,7 +20,7 @@ function ModelProgress() {
       ) : (
         <>
           <div className="mb-1 flex justify-between text-xs text-muted">
-            <span>{model.status === 'downloading' ? 'Downloading voice model… (one time only)' : 'Preparing voice…'}</span>
+            <span>{model.status === 'downloading' ? 'Downloading voice model… (one time only)' : 'Preparing voice (testing your device’s speed)…'}</span>
             {pct !== null && model.status === 'downloading' && <span>{pct}%</span>}
           </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">

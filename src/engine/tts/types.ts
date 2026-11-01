@@ -7,6 +7,10 @@ export interface TtsInfo {
   isolated?: boolean
   /** onnxruntime-web WASM threads (1 = single-threaded; irrelevant on WebGPU) */
   threads?: number
+  /** real-time factor of the start-up speed test (generation time / audio length) */
+  testRtf?: number
+  /** set when the GPU was tried and rejected as too slow */
+  gpuRejected?: { rtf: number | null }
 }
 
 export interface LoadProgress {
@@ -32,6 +36,8 @@ export interface TtsBackend {
   /** Requests carry an epoch; cancel(epoch) drops queued requests from older epochs. */
   generate(text: string, epoch: number): Promise<GeneratedAudio>
   cancel(epoch: number): void
+  /** Drop the loaded model so the next init() starts again (e.g. after changing the engine). */
+  reset?(): void
 }
 
 export class CancelledError extends Error {

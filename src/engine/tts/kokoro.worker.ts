@@ -75,9 +75,14 @@ self.onmessage = async (ev: MessageEvent<WorkerIn>) => {
           }
         },
       })
-      // warm-up so the first real sentence is fast (also downloads the voice file)
+      // Model loaded. Warm up (downloads the voice, compiles GPU shaders), then time a test sentence so the
+      // main thread can reject a GPU that is slower than real time. 'testing' starts its watchdog.
+      post({ type: 'testing' })
       await tts.generate('Hello.', { voice: VOICE })
-      post({ type: 'ready', info: { device: msg.device, dtype: msg.dtype, isolated: self.crossOriginIsolated, threads } })
+      const t0 = performance.now()
+      const test = await tts.generate('This is a short test of the reading voice.', { voice: VOICE })
+      const testRtf = (performance.now() - t0) / 1000 / (test.audio.length / test.sampling_rate)
+      post({ type: 'ready', info: { device: msg.device, dtype: msg.dtype, isolated: self.crossOriginIsolated, threads, testRtf } })
       void pump()
     } catch (e) {
       post({ type: 'error', message: String((e as Error)?.message ?? e) })

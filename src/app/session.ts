@@ -1,124 +1,121 @@
 import { Player, type SeekOffset } from '../engine/tts/player'
 import { createBackend } from '../engine/tts/select'
-import type { TtsBackend } from '../engine/tts/types'
-import { buildBookIndex, sectionEndSentence, sentenceAt, type BookIndex } from '../engine/doc/bookIndex'
-import type { BookDoc } from '../engine/doc/types'
-import { audioStore } from '../data/audioCache'
+import type { TtsBackend, VoiceModel } from '../engine/tts/types'
+import type { BookIndex } from '../engine/doc/bookIndex'
 import { getVoicePref, setAutoVoice } from '../engine/tts/engineChoice'
-import type { VoiceModel } from '../engine/tts/types'
-import { toast } from '../ui/toast'
+import { audioStore } from '../data/audioCache'
 import { saveProgress } from '../data/repo'
 import type { Locator } from '../data/db'
+import { toast } from '../ui/toast'
 import { settingsSnapshot, useSettings } from '../store/settings'
 import { usePlayback } from '../store/playback'
 import { setupMediaSession, updateMediaPosition } from './mediaSession'
+import { DEFAULT_SECONDS_PER_CHAR, estimateTimes, playedFraction, refineSecondsPerChar, sentenceAtFraction, type TimeEstimate } from './playback/estimates'
+import { indexBook, resolveStart, watchSettings } from './playback/indexing'
+import { ensureModel, resetModelState } from './playback/modelLoader'
+import { locatorOf, sectionJumpTarget } from './playback/navigation'
+import { ProgressSaver } from './playback/progressSaver'
+import { SleepTimer, type SleepMode } from './playback/sleepTimer'
+import type { OpenBook } from './playback/types'
+import { PREFETCH_VISIBLE, prefetchDepth, watchVisibility } from './playback/visibility'
+import { SlowVoiceDetector, slowVoiceAction } from './playback/voiceAutoSwitch'
 
-export interface OpenBook {
-  id: string
-  title: string
-  cover?: string
-  doc: BookDoc
-  /** persist progress for this book (false for the scratch TTS test page) */
-  persist: boolean
-}
+export type { OpenBook } from './playback/types'
+export { PREFETCH_HIDDEN, PREFETCH_VISIBLE } from './playback/visibility'
 
 type IndexListener = (index: BookIndex) => void
 
-/** Sentences generated ahead while the app is visible / hidden (screen locked, in the background). */
-export const PREFETCH_VISIBLE = 3
-export const PREFETCH_HIDDEN = 8
-
-/** The single playback session: one Player, the open book and its sentence index. */
+/**
+ * The single playback session: one Player, the open book and its sentence index.
+ * The pieces (sleep timer, progress saving, estimates, voice auto-switch, ...) live in ./playback/;
+ * this class wires them to the player and the playback store.
+ */
 class Session {
   readonly backend: TtsBackend
   readonly player: Player
   book: OpenBook | null = null
   index: BookIndex | null = null
+  /** Seconds of audio per spoken character at 1x (refined from real audio as it is generated). */
+  secondsPerChar = DEFAULT_SECONDS_PER_CHAR
   private indexListeners = new Set<IndexListener>()
-  private lastSaved = 0
-  private sleepTimeout: ReturnType<typeof setTimeout> | null = null
-  private skipKey = ''
-  private slowHintShown = false
-  private rtfCount = 0
+  private readonly sleep: SleepTimer
+  private readonly progress: ProgressSaver
+  private readonly slowVoice = new SlowVoiceDetector()
 
   constructor() {
     this.backend = createBackend()
     // saved audio is labelled with the voice that made it, so switching voices never replays the other voice
     audioStore.voice = () => this.voice()
     this.player = new Player({ backend: this.backend, store: audioStore, prefetch: PREFETCH_VISIBLE })
-    this.player.setSpeed(useSettings.getState().speed)
-    usePlayback.setState({ speed: this.player.speed })
+    this.applySpeed(useSettings.getState().speed)
 
-    this.player.on('state', (state) => {
+    this.sleep = new SleepTimer({
+      fadeOut: (ms) => void this.player.fadeOutAndPause(ms),
+      publish: (sleep) => usePlayback.setState({ sleep }),
+      getState: () => usePlayback.getState().sleep,
+    })
+    this.progress = new ProgressSaver(
+      () => ({ book: this.book, index: this.index, sentence: this.player.index }),
+      (p) => saveProgress(p),
+    )
+    this.wirePlayer()
+    setupMediaSession(this)
+
+    watchSettings({
+      speed: () => this.player.speed,
+      // speed can also change from sync (settings replaced from another device)
+      onSpeed: (speed) => this.applySpeed(speed),
+      // smart-skip or pronunciation changed: rebuild the sentence index
+      onIndexSettings: () => this.reindex(),
+    })
+    watchVisibility((hidden) => {
+      // screen locked / app in background: the browser may throttle us, so build a bigger audio buffer
+      this.player.setPrefetchDepth(prefetchDepth(hidden))
+      if (hidden) void this.saveNow()
+    })
+  }
+
+  private wirePlayer() {
+    const p = this.player
+    p.on('state', (state) => {
       usePlayback.setState({ state, error: state === 'error' ? usePlayback.getState().error : undefined })
       if (state === 'paused' || state === 'ended') void this.saveNow()
       updateMediaPosition(this)
     })
-    this.player.on('sentence', (i) => {
+    p.on('sentence', (i) => {
       const section = this.index?.sentences[i]?.section ?? 0
       const { section: prevSection, index: prevIndex } = usePlayback.getState()
       usePlayback.setState({ index: i, section })
-      const sleep = usePlayback.getState().sleep
-      // only when reading on into the next chapter, not when the user jumps somewhere else
-      if (sleep.mode === 'chapter' && section !== prevSection && i === prevIndex + 1 && this.player.isActive) {
-        // reached the next chapter: stop at its start
-        this.clearSleep()
-        void this.player.fadeOutAndPause(3000)
-      }
-      if (Date.now() - this.lastSaved > 4000) void this.saveNow()
+      this.sleep.onSentence({ prevIndex, prevSection, index: i, section, active: p.isActive })
+      this.progress.saveIfDue()
       updateMediaPosition(this)
     })
-    this.player.on('error', (e) => usePlayback.setState({ error: e.message }))
-    this.player.on('chunk', ({ index, duration }) => {
+    p.on('error', (e) => usePlayback.setState({ error: e.message }))
+    p.on('chunk', ({ index, duration }) => {
       const s = this.index?.sentences[index]
-      if (s && duration > 0 && s.chars > 20) this.secondsPerChar = this.secondsPerChar * 0.9 + (duration / s.chars) * 0.1
+      if (s) this.secondsPerChar = refineSecondsPerChar(this.secondsPerChar, duration, s.chars)
     })
-    this.player.on('rtf', (rtf) => {
+    p.on('rtf', (rtf) => {
       usePlayback.setState({ rtf })
-      // Kokoro can't keep up on this device: suggest the fast voice (once per session)
-      if (!this.slowHintShown && this.voice() === 'kokoro' && ++this.rtfCount >= 4 && rtf * this.player.speed > 1.3) {
-        this.slowHintShown = true
-        if (getVoicePref() === 'auto') {
-          // Auto: switch to the fast voice right away, keep playing from the same sentence
-          setAutoVoice('piper')
-          this.switchEngine()
-          toast('Switched to the fast voice so playback stays smooth on this device.', 6000)
-        } else {
-          toast('This device is too slow for the natural voice. For smooth playback choose Settings → Voice → Fast (Piper).', 9000)
-        }
-      }
+      if (this.slowVoice.observe(rtf, p.speed, this.voice())) this.onVoiceTooSlow()
     })
-    setupMediaSession(this)
+  }
 
-    // rebuild the sentence index when smart-skip or pronunciation settings change
-    this.skipKey = this.indexKey()
-    useSettings.subscribe((st) => {
-      // speed can also change from sync (settings replaced from another device)
-      if (st.speed !== this.player.speed) {
-        this.player.setSpeed(st.speed)
-        usePlayback.setState({ speed: this.player.speed })
-      }
-      const key = this.indexKey()
-      if (key !== this.skipKey) {
-        this.skipKey = key
-        this.reindex()
-      }
-    })
-    if (typeof document !== 'undefined') {
-      const onVisibility = () => {
-        const hidden = document.visibilityState === 'hidden'
-        // screen locked / app in background: the browser may throttle us, so build a bigger audio buffer
-        this.player.setPrefetchDepth(hidden ? PREFETCH_HIDDEN : PREFETCH_VISIBLE)
-        if (hidden) void this.saveNow()
-      }
-      document.addEventListener('visibilitychange', onVisibility)
-      if (document.visibilityState === 'hidden') onVisibility()
+  /** Kokoro can't keep up on this device (reported once per engine). */
+  private onVoiceTooSlow() {
+    if (slowVoiceAction(getVoicePref()) === 'switch') {
+      // Auto: switch to the fast voice right away, keep playing from the same sentence
+      setAutoVoice('piper')
+      this.switchEngine()
+      toast('Switched to the fast voice so playback stays smooth on this device.', 6000)
+    } else {
+      toast('This device is too slow for the natural voice. For smooth playback choose Settings → Voice → Fast (Piper).', 9000)
     }
   }
 
-  private indexKey() {
-    const s = useSettings.getState()
-    return JSON.stringify([s.skip, s.dictionary])
+  private applySpeed(speed: number) {
+    this.player.setSpeed(speed)
+    usePlayback.setState({ speed: this.player.speed })
   }
 
   onIndex(fn: IndexListener): () => void {
@@ -127,7 +124,6 @@ class Session {
     return () => this.indexListeners.delete(fn)
   }
 
-  /** Make sure the voice model is loading; reports download progress to the store. */
   /** Voice currently in use (fake backend reports kokoro). */
   voice(): VoiceModel {
     return (this.backend as { voice?: VoiceModel }).voice ?? 'kokoro'
@@ -140,34 +136,14 @@ class Session {
     this.backend.reset?.()
     this.player.dropAudio()
     this.player.resetRtf()
-    this.slowHintShown = false
-    this.rtfCount = 0
-    usePlayback.setState({ device: undefined, rtf: undefined, model: { status: 'idle', fraction: null, loadedBytes: 0, totalBytes: 0 } })
+    this.slowVoice.reset()
+    resetModelState()
     if (wasActive) this.play()
   }
 
+  /** Make sure the voice model is loading; reports download progress to the store. */
   ensureModel(): Promise<void> {
-    const m = usePlayback.getState().model
-    if (m.status === 'ready' || m.status === 'downloading' || m.status === 'loading') return Promise.resolve()
-    usePlayback.setState({ model: { ...m, status: 'loading', error: undefined } })
-    return this.backend
-      .init((p) =>
-        usePlayback.setState({
-          model: { status: p.status, fraction: p.fraction, loadedBytes: p.loadedBytes, totalBytes: p.totalBytes },
-        }),
-      )
-      .then((info) => {
-        usePlayback.setState({
-          device: `${info.autoSwitched ? 'auto→piper · ' : ''}${info.device} / ${info.dtype}${info.gpuRejected ? ` (GPU too slow${info.gpuRejected.rtf ? `: RTF ${info.gpuRejected.rtf.toFixed(1)}` : ''})` : ''}`,
-          isolated: info.isolated,
-          threads: info.threads,
-          model: { ...usePlayback.getState().model, status: 'ready' },
-        })
-        void navigator.storage?.persist?.()
-      })
-      .catch((e: Error) => {
-        usePlayback.setState({ model: { ...usePlayback.getState().model, status: 'error', error: e.message } })
-      })
+    return ensureModel(this.backend)
   }
 
   open(book: OpenBook, start?: Locator | number) {
@@ -179,13 +155,11 @@ class Session {
     if (this.book?.persist) void this.saveNow()
     this.player.pause()
     this.book = book
-    const s = settingsSnapshot()
-    this.index = buildBookIndex(book.doc, { skip: s.skip, dictionary: s.dictionary })
-    const idx = this.index
-    const startIndex = typeof start === 'number' ? start : start ? sentenceAt(idx, start.block, start.offset) : 0
+    const idx = indexBook(book.doc, settingsSnapshot())
+    this.index = idx
     this.player.setSource(
       { bookId: book.id, count: idx.sentences.length, text: (i) => idx.sentences[i].spoken.text },
-      startIndex,
+      resolveStart(idx, start),
     )
     usePlayback.setState({
       bookId: book.id,
@@ -208,6 +182,7 @@ class Session {
     usePlayback.setState({ bookId: null, title: '', state: 'idle', count: 0, index: 0 })
   }
 
+  /** Rebuild the index of the open book, keeping the position (by locator) and playing state. */
   private reindex() {
     if (!this.book || !this.index) return
     const loc = this.locator()
@@ -221,9 +196,7 @@ class Session {
 
   /** Stable locator of the current sentence. */
   locator(i = this.player.index): Locator | null {
-    const s = this.index?.sentences[i]
-    if (!s) return null
-    return { section: s.section, block: s.block, offset: s.start }
+    return locatorOf(this.index, i)
   }
 
   play() {
@@ -238,109 +211,43 @@ class Session {
 
   seekTo(target: Locator | number, autoplay?: boolean, offset: SeekOffset = 0) {
     if (!this.index) return
-    const i = typeof target === 'number' ? target : sentenceAt(this.index, target.block, target.offset)
+    const i = typeof target === 'number' ? target : resolveStart(this.index, target)
     if (autoplay) void this.ensureModel()
     this.player.seek(i, offset, autoplay)
   }
 
   nextSection(dir: 1 | -1) {
-    const idx = this.index
-    if (!idx) return
-    const cur = idx.sentences[this.player.index]?.section ?? 0
-    const starts = idx.sectionSentenceStart
-    if (dir === 1) {
-      for (let s = cur + 1; s < starts.length; s++) {
-        if (starts[s] < idx.sentences.length && idx.sentences[starts[s]].section === s) return this.seekTo(starts[s])
-      }
-    } else {
-      const curStart = starts[cur]
-      // like "previous track": go to the start of this section first
-      if (this.player.index > curStart + 1) return this.seekTo(curStart)
-      for (let s = cur - 1; s >= 0; s--) {
-        if (starts[s] < idx.sentences.length && idx.sentences[starts[s]].section === s) return this.seekTo(starts[s])
-      }
-    }
+    if (!this.index) return
+    const target = sectionJumpTarget(this.index, this.player.index, dir)
+    if (target !== null) this.seekTo(target)
   }
 
   setSpeed(speed: number) {
-    this.player.setSpeed(speed)
-    usePlayback.setState({ speed: this.player.speed })
+    this.applySpeed(speed)
     useSettings.getState().set({ speed: this.player.speed })
     updateMediaPosition(this)
   }
 
-  /** Seconds of audio per spoken character at 1x (refined from real audio as it is generated). */
-  secondsPerChar = 0.068
-
-  estimate(): { elapsed: number; total: number; sectionRemaining: number } {
-    const idx = this.index
-    if (!idx || !idx.sentences.length) return { elapsed: 0, total: 0, sectionRemaining: 0 }
-    const i = this.player.index
-    const k = this.secondsPerChar / this.player.speed
-    const d = this.player.duration
-    const within = d ? Math.min(1, this.player.currentTime / d) : 0
-    const elapsedChars = idx.cumChars[i] + idx.sentences[i].chars * within
-    const sec = idx.sentences[i].section
-    const end = sectionEndSentence(idx, sec)
-    return {
-      elapsed: elapsedChars * k,
-      total: idx.totalChars * k,
-      sectionRemaining: Math.max(0, idx.cumChars[end + 1] - elapsedChars) * k,
-    }
+  estimate(): TimeEstimate {
+    const within = playedFraction(this.player.currentTime, this.player.duration)
+    return estimateTimes(this.index, this.player.index, within, this.secondsPerChar, this.player.speed)
   }
 
   /** Map a fraction of the book (0..1) to a sentence index. */
   sentenceAtFraction(f: number): number {
-    const idx = this.index
-    if (!idx) return 0
-    const target = f * idx.totalChars
-    let lo = 0
-    let hi = idx.sentences.length - 1
-    while (lo < hi) {
-      const mid = (lo + hi + 1) >> 1
-      if (idx.cumChars[mid] <= target) lo = mid
-      else hi = mid - 1
-    }
-    return lo
+    return sentenceAtFraction(this.index, f)
   }
 
-  async saveNow() {
-    const book = this.book
-    const idx = this.index
-    if (!book?.persist || !idx) return
-    const loc = this.locator()
-    if (!loc) return
-    this.lastSaved = Date.now()
-    const i = this.player.index
-    await saveProgress({
-      bookId: book.id,
-      sentence: i,
-      locator: loc,
-      percent: idx.totalChars ? idx.cumChars[i] / idx.totalChars : 0,
-      sectionTitle: book.doc.sections[loc.section]?.title ?? '',
-    })
+  saveNow(): Promise<void> {
+    return this.progress.saveNow()
   }
 
-  // ---------- sleep timer ----------
-  setSleep(mode: 'off' | 'chapter' | number) {
-    this.clearSleep()
-    if (mode === 'off') return
-    if (mode === 'chapter') {
-      usePlayback.setState({ sleep: { mode: 'chapter' } })
-      return
-    }
-    const ms = mode * 60_000
-    usePlayback.setState({ sleep: { mode: 'minutes', minutes: mode, endsAt: Date.now() + ms } })
-    this.sleepTimeout = setTimeout(() => {
-      this.clearSleep()
-      void this.player.fadeOutAndPause(5000)
-    }, Math.max(0, ms - 5000))
+  setSleep(mode: SleepMode) {
+    this.sleep.set(mode)
   }
 
   clearSleep() {
-    if (this.sleepTimeout) clearTimeout(this.sleepTimeout)
-    this.sleepTimeout = null
-    usePlayback.setState({ sleep: { mode: 'off' } })
+    this.sleep.clear()
   }
 }
 

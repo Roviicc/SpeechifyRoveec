@@ -1,9 +1,25 @@
-import type { Session } from './session'
+import type { Player } from '../engine/tts/player'
+import type { BookIndex } from '../engine/doc/bookIndex'
+import type { OpenBook } from './playback/types'
+import type { TimeEstimate } from './playback/estimates'
+
+/** What the Media Session needs from the playback session. */
+export interface MediaSessionHost {
+  readonly player: Player
+  readonly book: OpenBook | null
+  readonly index: BookIndex | null
+  play(): void
+  estimate(): TimeEstimate
+}
+
+function mediaSession(): MediaSession | null {
+  return typeof navigator !== 'undefined' && 'mediaSession' in navigator ? navigator.mediaSession : null
+}
 
 /** Lock-screen / notification controls: title, play/pause, next/previous sentence. */
-export function setupMediaSession(s: Session) {
-  if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return
-  const ms = navigator.mediaSession
+export function setupMediaSession(s: MediaSessionHost) {
+  const ms = mediaSession()
+  if (!ms) return
   const set = (action: MediaSessionAction, fn: MediaSessionActionHandler | null) => {
     try {
       ms.setActionHandler(action, fn)
@@ -20,17 +36,16 @@ export function setupMediaSession(s: Session) {
   set('seekforward', () => s.player.next())
 }
 
-export function updateMediaPosition(s: Session) {
-  if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return
-  const ms = navigator.mediaSession
+export function updateMediaPosition(s: MediaSessionHost) {
+  const ms = mediaSession()
+  if (!ms) return
   const book = s.book
   if (!book) {
     ms.metadata = null
     ms.playbackState = 'none'
     return
   }
-  const idx = s.index
-  const section = idx?.sentences[s.player.index]?.section ?? 0
+  const section = s.index?.sentences[s.player.index]?.section ?? 0
   const chapter = book.doc.sections[section]?.title ?? ''
   const artwork = book.cover ? [{ src: book.cover, sizes: '256x256', type: 'image/jpeg' }] : [{ src: '/pwa-512.png', sizes: '512x512', type: 'image/png' }]
   if (typeof MediaMetadata !== 'undefined') {

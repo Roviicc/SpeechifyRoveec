@@ -9,6 +9,8 @@ export interface ModelStatus {
   error?: string
 }
 
+export const IDLE_MODEL: ModelStatus = { status: 'idle', fraction: null, loadedBytes: 0, totalBytes: 0 }
+
 export interface SleepTimer {
   mode: 'off' | 'minutes' | 'chapter'
   endsAt?: number
@@ -43,6 +45,6 @@ export const usePlayback = create<PlaybackState>()(() => ({
   count: 0,
   section: 0,
   speed: 1,
-  model: { status: 'idle', fraction: null, loadedBytes: 0, totalBytes: 0 },
+  model: { ...IDLE_MODEL },
   sleep: { mode: 'off' },
 }))

@@ -4,7 +4,8 @@ import type { TtsBackend } from '../engine/tts/types'
 import { buildBookIndex, sectionEndSentence, sentenceAt, type BookIndex } from '../engine/doc/bookIndex'
 import type { BookDoc } from '../engine/doc/types'
 import { audioStore } from '../data/audioCache'
-import { getVoiceModel } from '../engine/tts/engineChoice'
+import { getVoicePref, setAutoVoice } from '../engine/tts/engineChoice'
+import type { VoiceModel } from '../engine/tts/types'
 import { toast } from '../ui/toast'
 import { saveProgress } from '../data/repo'
 import type { Locator } from '../data/db'
@@ -73,9 +74,16 @@ class Session {
     this.player.on('rtf', (rtf) => {
       usePlayback.setState({ rtf })
       // Kokoro can't keep up on this device: suggest the fast voice (once per session)
-      if (!this.slowHintShown && getVoiceModel() === 'kokoro' && ++this.rtfCount >= 4 && rtf * this.player.speed > 1.3) {
+      if (!this.slowHintShown && this.voice() === 'kokoro' && ++this.rtfCount >= 4 && rtf * this.player.speed > 1.3) {
         this.slowHintShown = true
-        toast('This device is too slow for the natural voice. For smooth playback choose Settings → Voice → Fast (Piper).', 9000)
+        if (getVoicePref() === 'auto') {
+          // Auto: switch to the fast voice right away, keep playing from the same sentence
+          setAutoVoice('piper')
+          this.switchEngine()
+          toast('Switched to the fast voice so playback stays smooth on this device.', 6000)
+        } else {
+          toast('This device is too slow for the natural voice. For smooth playback choose Settings → Voice → Fast (Piper).', 9000)
+        }
       }
     })
     setupMediaSession(this)
@@ -118,6 +126,11 @@ class Session {
   }
 
   /** Make sure the voice model is loading; reports download progress to the store. */
+  /** Voice currently in use (fake backend reports kokoro). */
+  voice(): VoiceModel {
+    return (this.backend as { voice?: VoiceModel }).voice ?? 'kokoro'
+  }
+
   /** Switch the voice engine (Auto / GPU / Processor): unload the model; it reloads on the next play. */
   switchEngine() {
     const wasActive = this.player.isActive
@@ -125,7 +138,6 @@ class Session {
     this.backend.reset?.()
     this.player.dropAudio()
     this.player.resetRtf()
-    audioStore.voice = getVoiceModel()
     this.slowHintShown = false
     this.rtfCount = 0
     usePlayback.setState({ device: undefined, rtf: undefined, model: { status: 'idle', fraction: null, loadedBytes: 0, totalBytes: 0 } })
@@ -144,7 +156,7 @@ class Session {
       )
       .then((info) => {
         usePlayback.setState({
-          device: `${info.device} / ${info.dtype}${info.gpuRejected ? ` (GPU too slow${info.gpuRejected.rtf ? `: RTF ${info.gpuRejected.rtf.toFixed(1)}` : ''})` : ''}`,
+          device: `${info.autoSwitched ? 'auto→piper · ' : ''}${info.device} / ${info.dtype}${info.gpuRejected ? ` (GPU too slow${info.gpuRejected.rtf ? `: RTF ${info.gpuRejected.rtf.toFixed(1)}` : ''})` : ''}`,
           isolated: info.isolated,
           threads: info.threads,
           model: { ...usePlayback.getState().model, status: 'ready' },

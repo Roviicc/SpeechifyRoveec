@@ -3,7 +3,7 @@ import { ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { useSettings } from '../../store/settings'
 import { usePlayback } from '../../store/playback'
 import { Segmented, Toggle } from '../../ui/controls'
-import { getEnginePref, getVoiceModel, setEnginePref, setVoiceModel, type EnginePref } from '../../engine/tts/engineChoice'
+import { effectiveVoice, getAutoVoice, getEnginePref, getVoicePref, setAutoVoice, setEnginePref, setVoicePref, type EnginePref, type VoicePref } from '../../engine/tts/engineChoice'
 import { ThemePicker } from '../reader/sheets'
 import { audioStore } from '../../data/audioCache'
 import { session } from '../../app/session'
@@ -35,7 +35,9 @@ export function SettingsScreen() {
   const [say, setSay] = useState('')
   const [connected, setConnected] = useState(isConnected())
   const [engine, setEngine] = useState<EnginePref>(getEnginePref())
-  const [voiceModel, setVoiceModelState] = useState(getVoiceModel())
+  const [voicePref, setVoicePrefState] = useState<VoicePref>(getVoicePref())
+  const autoVoice = getAutoVoice()
+  const voiceModel = effectiveVoice(voicePref, model.status === 'ready' ? getAutoVoice() : autoVoice)
 
   useEffect(() => {
     void audioStore.totalSize().then(setCacheSize)
@@ -157,23 +159,31 @@ export function SettingsScreen() {
 
       <Group title="Voice">
         <div className="py-2 text-[15px]">
-          <Segmented<'kokoro' | 'piper'>
+          <Segmented<VoicePref>
             label="Voice"
-            value={voiceModel}
+            value={voicePref}
             onChange={(v) => {
-              setVoiceModelState(v)
-              setVoiceModel(v)
+              setVoicePrefState(v)
+              setVoicePref(v)
+              if (v === 'auto') setAutoVoice(null) // test this device again
               session().switchEngine()
             }}
             options={[
-              { value: 'kokoro', label: 'Natural (Kokoro)' },
-              { value: 'piper', label: 'Fast (Piper)' },
+              { value: 'auto', label: 'Auto' },
+              { value: 'kokoro', label: 'Natural' },
+              { value: 'piper', label: 'Fast' },
             ]}
           />
-          <p className="mt-1.5 text-sm text-muted">
-            {voiceModel === 'kokoro'
-              ? 'Most natural. Needs a fast phone or a GPU (one-time download ~90–330 MB).'
-              : 'Lighter voice that runs smoothly on most phones (one-time download ~65 MB).'}
+          <p className="mt-1.5 text-sm text-muted" data-testid="voice-choice-note">
+            {voicePref === 'auto'
+              ? autoVoice === 'piper'
+                ? 'Auto is using the Fast voice (Piper): the natural voice was too slow on this device.'
+                : autoVoice === 'kokoro'
+                  ? 'Auto is using the Natural voice (Kokoro): this device is fast enough.'
+                  : 'Auto tries the Natural voice on first play and switches to the Fast voice if this device is too slow.'
+              : voicePref === 'kokoro'
+                ? 'Natural (Kokoro): most natural. Needs a fast phone or a GPU (one-time download ~90–330 MB).'
+                : 'Fast (Piper): lighter voice that runs smoothly on most phones (one-time download ~65 MB).'}
           </p>
           <p className="mt-1 text-sm text-muted" data-testid="voice-status">
             {model.status === 'ready' ? `Ready on ${device}` : model.status === 'downloading' ? `Downloading… ${Math.round((model.fraction ?? 0) * 100)}%` : model.status === 'error' ? `Error: ${model.error}` : model.status === 'loading' ? 'Loading…' : 'Downloads on first play (one time)'}

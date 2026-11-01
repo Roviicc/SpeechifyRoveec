@@ -26,12 +26,42 @@ function set(key: string, v: string | null) {
   }
 }
 
-/** Which voice model: Kokoro (natural, heavier) or Piper (fast). */
-export function getVoiceModel(): 'kokoro' | 'piper' {
-  return get(MODEL_KEY) === 'piper' ? 'piper' : 'kokoro'
+export type VoicePref = 'auto' | 'kokoro' | 'piper'
+const AUTO_VOICE_KEY = 'lumen-voice-auto-model'
+/** Kokoro must generate at least this fast (RTF) in its start-up test, or Auto switches to Piper. */
+export const KOKORO_MAX_RTF = 0.9
+
+/** Voice setting: Auto (Kokoro if this device is fast enough, else Piper), or a fixed choice. */
+export function getVoicePref(): VoicePref {
+  const v = get(MODEL_KEY)
+  return v === 'kokoro' || v === 'piper' ? v : 'auto'
 }
-export function setVoiceModel(m: 'kokoro' | 'piper') {
-  set(MODEL_KEY, m === 'piper' ? 'piper' : null)
+export function setVoicePref(p: VoicePref) {
+  set(MODEL_KEY, p === 'auto' ? null : p)
+}
+
+/** What Auto decided on this device (null = not tested yet). */
+export function getAutoVoice(): 'kokoro' | 'piper' | null {
+  const v = get(AUTO_VOICE_KEY)
+  return v === 'kokoro' || v === 'piper' ? v : null
+}
+export function setAutoVoice(v: 'kokoro' | 'piper' | null) {
+  set(AUTO_VOICE_KEY, v)
+}
+
+/** The voice that will actually be used. */
+export function effectiveVoice(pref: VoicePref = getVoicePref(), auto = getAutoVoice()): 'kokoro' | 'piper' {
+  return pref === 'auto' ? (auto ?? 'kokoro') : pref
+}
+
+/** Auto should test Kokoro's speed (and fall back to Piper) only when nothing has been decided yet. */
+export function shouldTestKokoro(pref: VoicePref = getVoicePref(), auto = getAutoVoice()): boolean {
+  return pref === 'auto' && auto === null
+}
+
+/** Kept for older call sites: the effective voice. */
+export function getVoiceModel(): 'kokoro' | 'piper' {
+  return effectiveVoice()
 }
 
 export function getEnginePref(): EnginePref {

@@ -12,6 +12,8 @@ export interface TtsInfo {
   /** set when the GPU was tried and rejected as too slow */
   gpuRejected?: { rtf: number | null }
   voice?: VoiceModel
+  /** Auto mode chose Piper because Kokoro's speed test was too slow (null = Kokoro failed to start) */
+  autoSwitched?: { kokoroRtf: number | null }
 }
 
 export interface LoadProgress {

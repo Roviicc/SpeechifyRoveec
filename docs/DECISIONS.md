@@ -54,3 +54,9 @@ RTF 8.7 on WASM (its GPU hung), about 9x too slow. Piper `en_US-lessac-medium` (
 measured RTF 0.19 vs Kokoro 2.2 on the same headless machine (~11x faster). Settings -> Voice: Natural (Kokoro) / Fast (Piper);
 the app suggests Piper when Kokoro can't keep up. Audio-cache hashes include the voice, so the two never mix.
 Kokoro start-up now has time limits on every stage, with automatic fallback GPU -> threaded CPU -> single-thread CPU.
+
+**2026-11-02 — Voice defaults to Auto.** On a new device Auto tries Kokoro once (its start-up speed test must reach
+RTF <= 0.9) and otherwise switches to Piper and remembers it (`lumen-voice-auto-model`). If Kokoro passes but real playback
+runs slower than real time (RTF x speed > 1.3 over 4+ sentences), Auto switches to Piper mid-book without losing the place.
+Natural/Fast remain as fixed choices; picking Auto again re-tests the device. Cost: a slow device downloads Kokoro once
+before falling back.

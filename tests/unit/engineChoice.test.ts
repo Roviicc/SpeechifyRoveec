@@ -41,3 +41,19 @@ describe('engine attempt chain', () => {
     expect(attemptChain('auto', true, { device: 'wasm', gpuRtf: 3, at: 1 }, false)[0].device).toBe('wasm')
   })
 })
+
+describe('auto voice', () => {
+  beforeEach(() => localStorage.clear())
+  it('defaults to auto, tests Kokoro once, then sticks to the decision', async () => {
+    const m = await import('../../src/engine/tts/engineChoice')
+    expect(m.getVoicePref()).toBe('auto')
+    expect(m.effectiveVoice()).toBe('kokoro')
+    expect(m.shouldTestKokoro()).toBe(true)
+    m.setAutoVoice('piper')
+    expect(m.effectiveVoice()).toBe('piper')
+    expect(m.shouldTestKokoro()).toBe(false)
+    m.setVoicePref('kokoro')
+    expect(m.effectiveVoice()).toBe('kokoro')
+    expect(m.shouldTestKokoro()).toBe(false)
+  })
+})

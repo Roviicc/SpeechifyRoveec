@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 import { KokoroTTS } from 'kokoro-js'
+import { env } from '@huggingface/transformers'
 import { encodeWav, trimSilence } from './wav'
 import { MODEL_ID, VOICE } from './types'
 import type { WorkerIn, WorkerOut } from './protocol'
@@ -12,6 +13,23 @@ const queue: Array<{ reqId: number; epoch: number; text: string }> = []
 let busy = false
 
 const post = (msg: WorkerOut, transfer: Transferable[] = []) => self.postMessage(msg, transfer)
+
+/**
+ * onnxruntime-web can only use WASM threads when SharedArrayBuffer is available, i.e. when the page is
+ * cross-origin isolated (COOP + COEP headers, see vercel.json / vite.config.ts). Otherwise it is 1 thread.
+ * Default: up to 4 threads, leaving one core for the UI and audio. Returns the thread count in use.
+ */
+function configureWasmThreads(requested?: number): number {
+  const wasm = env.backends.onnx.wasm as { numThreads?: number; proxy?: boolean } | undefined
+  const canThread = self.crossOriginIsolated && typeof SharedArrayBuffer !== 'undefined'
+  const cores = navigator.hardwareConcurrency || 2
+  const threads = canThread ? Math.max(1, Math.min(requested ?? Math.min(4, cores - 1), cores)) : 1
+  if (wasm) {
+    wasm.numThreads = threads
+    wasm.proxy = false // we already are in a worker
+  }
+  return threads
+}
 
 async function pump() {
   if (busy || !tts) return
@@ -46,6 +64,7 @@ self.onmessage = async (ev: MessageEvent<WorkerIn>) => {
   const msg = ev.data
   if (msg.type === 'init') {
     try {
+      const threads = configureWasmThreads(msg.threads)
       tts = await KokoroTTS.from_pretrained(MODEL_ID, {
         dtype: msg.dtype,
         device: msg.device,
@@ -58,7 +77,7 @@ self.onmessage = async (ev: MessageEvent<WorkerIn>) => {
       })
       // warm-up so the first real sentence is fast (also downloads the voice file)
       await tts.generate('Hello.', { voice: VOICE })
-      post({ type: 'ready', info: { device: msg.device, dtype: msg.dtype } })
+      post({ type: 'ready', info: { device: msg.device, dtype: msg.dtype, isolated: self.crossOriginIsolated, threads } })
       void pump()
     } catch (e) {
       post({ type: 'error', message: String((e as Error)?.message ?? e) })

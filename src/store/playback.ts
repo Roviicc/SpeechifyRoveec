@@ -26,6 +26,10 @@ export interface PlaybackState {
   speed: number
   model: ModelStatus
   device?: string
+  /** worker is cross-origin isolated (WASM threads possible) */
+  isolated?: boolean
+  /** WASM threads used by the voice */
+  threads?: number
   rtf?: number
   sleep: SleepTimer
   error?: string

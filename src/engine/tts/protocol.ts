@@ -1,7 +1,7 @@
 import type { TtsInfo } from './types'
 
 export type WorkerIn =
-  | { type: 'init'; device: 'webgpu' | 'wasm'; dtype: 'fp32' | 'q8' }
+  | { type: 'init'; device: 'webgpu' | 'wasm'; dtype: 'fp32' | 'q8'; threads?: number }
   | { type: 'generate'; reqId: number; epoch: number; text: string }
   | { type: 'cancel'; epoch: number }
 

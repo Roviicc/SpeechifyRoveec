@@ -72,11 +72,16 @@ function Toasts() {
 }
 
 function DebugOverlay() {
-  const { device, rtf, model, state, index, count } = usePlayback()
+  const { device, isolated, threads, rtf, model, state, index, count } = usePlayback()
   if (!new URLSearchParams(location.search).has('debug')) return null
+  // the page's own isolation is known before the model loads; the worker reports its thread count when ready
+  const coi = isolated ?? self.crossOriginIsolated
   return (
     <div className="pointer-events-none fixed top-16 right-2 z-[70] rounded-lg bg-black/75 px-3 py-2 font-mono text-[11px] leading-5 text-white" data-testid="debug-overlay">
       <div>device: {device ?? model.status}</div>
+      <div data-testid="debug-isolation">
+        isolated: {coi ? 'yes' : 'no'} · threads: {threads ?? '—'}
+      </div>
       <div>RTF: {rtf ? rtf.toFixed(3) : '—'}</div>
       <div>
         state: {state} {index + 1}/{count}

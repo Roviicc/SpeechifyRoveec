@@ -3,6 +3,10 @@ export type TtsDevice = 'webgpu' | 'wasm' | 'fake'
 export interface TtsInfo {
   device: TtsDevice
   dtype: string
+  /** whether the worker runs cross-origin isolated (needed for WASM threads) */
+  isolated?: boolean
+  /** onnxruntime-web WASM threads (1 = single-threaded; irrelevant on WebGPU) */
+  threads?: number
 }
 
 export interface LoadProgress {

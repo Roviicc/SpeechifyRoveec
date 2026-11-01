@@ -49,3 +49,8 @@ closing the window cancels. `npm run check`: 40 unit tests; `npx playwright test
 Needs a human: real Google sign-in + Picker + sync through `/google.html` on desktop Chrome and Android Chrome
 (popup → tab behaviour, window closing itself, returning to the app), the Vercel headers on the deployed site
 (`crossOriginIsolated` in DevTools), and phone RTF with threads.
+
+## 2026-11-02 — First real-phone numbers (user's Android phone, Chrome, installed PWA)
+- Kokoro on GPU (WebGPU fp32): hung; no sentence finished, and the phone lagged. Auto fallback added.
+- Kokoro on processor (WASM q8, 4 threads, cross-origin isolated): RTF 8.7, unusable.
+- Piper `en_US-lessac-medium` (WASM, 4 threads): **RTF 0.42**, plays smoothly at 1x; should hold up to ~2x.

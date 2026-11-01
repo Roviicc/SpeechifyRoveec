@@ -102,4 +102,24 @@ describe('Session', () => {
     settings.useSettings.getState().replace({ ...cur, speed: 1.7, updatedAt: cur.updatedAt + 1 })
     expect(s.player.speed).toBe(1.7)
   })
+
+  it('rebuilds the index when pronunciation changes and keeps the position', () => {
+    const s = mod.session()
+    s.seekTo(5)
+    const before = s.index
+    const loc = s.locator()
+    settings.useSettings.getState().set({ dictionary: [{ word: 'first', say: 'furst' }] })
+    expect(s.index).not.toBe(before)
+    expect(s.locator()).toEqual(loc)
+    expect(s.index!.sentences[5].spoken.text).toContain('furst')
+    settings.useSettings.getState().set({ dictionary: [] })
+  })
+
+  it('estimates time and maps a fraction back to a sentence', () => {
+    const s = mod.session()
+    const est = s.estimate()
+    expect(est.elapsed).toBe(0)
+    expect(est.total).toBeCloseTo(s.index!.totalChars * s.secondsPerChar / s.player.speed)
+    expect(s.sentenceAtFraction(1)).toBe(s.index!.sentences.length - 1)
+  })
 })

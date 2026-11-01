@@ -8,3 +8,4 @@ playwright-report
 *.tsbuildinfo
 .vercel
 screenshots
+.claude/worktrees

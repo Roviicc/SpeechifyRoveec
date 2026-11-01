@@ -1,4 +1,4 @@
-import JSZip from 'jszip'
+import type JSZip from 'jszip'
 import { getFile } from '../../data/repo'
 
 const MIME: Record<string, string> = {
@@ -33,7 +33,7 @@ export class EpubImages {
     if (!p) {
       const gen = this.generation
       this.zip ??= this.loadFile(this.bookId)
-        .then((blob) => (blob ? JSZip.loadAsync(blob) : null))
+        .then(async (blob) => (blob ? (await import('jszip')).default.loadAsync(blob) : null))
         .catch(() => null)
       p = this.zip.then(async (zip) => {
         const f = zip?.file(path) ?? zip?.file(decodeURIComponent(path))

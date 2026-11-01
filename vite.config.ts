@@ -4,6 +4,24 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import { readFileSync } from 'node:fs'
+
+const TRANSFORMERS_VERSION: string = JSON.parse(readFileSync(new URL('./node_modules/@huggingface/transformers/package.json', import.meta.url), 'utf8')).version
+
+/**
+ * onnxruntime-web references its .wasm files with `new URL(..., import.meta.url)`, so Vite copies them into the
+ * build (36 MB). Both voices load the runtime from the CDN instead (Kokoro via transformers.js, Piper pointed at the
+ * same file), so those copies are never fetched: drop them from the output.
+ */
+function dropUnusedOrtWasm(): Plugin {
+  return {
+    name: 'lumen-drop-unused-ort-wasm',
+    apply: 'build',
+    generateBundle(_, bundle) {
+      for (const name of Object.keys(bundle)) if (/(^|\/)ort-wasm[^/]*\.wasm$/.test(name)) delete bundle[name]
+    },
+  }
+}
 
 /** Pages served WITHOUT cross-origin isolation (Google sign-in + Picker need window.opener / Google iframes). */
 const NOT_ISOLATED = ['/google.html']
@@ -30,8 +48,15 @@ function crossOriginIsolation(): Plugin {
 }
 
 export default defineConfig({
+  define: { __TRANSFORMERS_VERSION__: JSON.stringify(TRANSFORMERS_VERSION) },
+  resolve: {
+    // Piper's library imports the WASM-only onnxruntime build; use the same (WebGPU+WASM) build that Kokoro uses so
+    // both voices load one shared runtime file.
+    alias: [{ find: /^onnxruntime-web\/wasm$/, replacement: 'onnxruntime-web' }],
+  },
   plugins: [
     crossOriginIsolation(),
+    dropUnusedOrtWasm(),
     react(),
     tailwindcss(),
     VitePWA({

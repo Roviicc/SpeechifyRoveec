@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Bookmark, ChevronDown, FileImage, FileText, ListTree, Locate, MoreHorizontal, Moon, NotebookPen, Search, Type, X } from 'lucide-react'
 import { session } from '../../app/session'
 import { navigate } from '../../app/router'
@@ -27,11 +27,13 @@ import { IconButton } from '../../ui/controls'
 import { Sheet, anySheetOpen } from '../../ui/Sheet'
 import { PlayerBar } from './PlayerBar'
 import { ReflowView } from './ReflowView'
-import { PdfView } from './PdfView'
 import { NotesSheet, SearchSheet, SleepSheet, SpeedSheet, TextSettingsSheet, TocSheet } from './sheets'
 import { SelectionToolbar, type SelectionInfo } from './SelectionToolbar'
 import { useReaderSync } from './useReaderSync'
 import type { TextSurface } from './surface'
+
+// the PDF page viewer is only needed for PDFs in Original mode
+const PdfView = lazy(() => import('./PdfView').then((m) => ({ default: m.PdfView })))
 
 type Panel = null | 'speed' | 'text' | 'toc' | 'sleep' | 'search' | 'notes' | 'menu' | 'note-edit'
 
@@ -276,7 +278,9 @@ export function ReaderScreen({ bookId }: { bookId: string }) {
           {!doc || !index ? (
             <p className="p-8 text-center text-muted">Opening…</p>
           ) : mode === 'original' && file ? (
-            <PdfView file={file} index={index} scrollEl={container} onSurface={setSurface} onUpdated={sync.onSurfaceUpdated} />
+            <Suspense fallback={<p className="p-8 text-center text-muted">Loading pages…</p>}>
+              <PdfView file={file} index={index} scrollEl={container} onSurface={setSurface} onUpdated={sync.onSurfaceUpdated} />
+            </Suspense>
           ) : (
             <ReflowView index={index} titles={doc.sections.map((s) => s.title)} onSurface={setSurface} imagesFrom={doc.type === 'epub' ? bookId : undefined} />
           )}

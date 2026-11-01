@@ -16,10 +16,9 @@ try {
   /* read-only in this browser: the library will use all cores */
 }
 
-// onnxruntime-web runtime files must match the installed onnxruntime-web version.
-const ORT_VERSION = '1.22.0-dev.20250409-89f8206ba4'
+// Same onnxruntime files Kokoro uses (transformers.js serves them from its CDN dist), so one download serves both voices.
 const WASM_PATHS = {
-  onnxWasm: `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist/`,
+  onnxWasm: `https://cdn.jsdelivr.net/npm/@huggingface/transformers@${__TRANSFORMERS_VERSION__}/dist/`,
   piperData: 'https://cdn.jsdelivr.net/npm/@diffusionstudio/piper-wasm@1.0.0/build/piper_phonemize.data',
   piperWasm: 'https://cdn.jsdelivr.net/npm/@diffusionstudio/piper-wasm@1.0.0/build/piper_phonemize.wasm',
 }

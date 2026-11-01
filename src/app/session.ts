@@ -43,6 +43,8 @@ class Session {
 
   constructor() {
     this.backend = createBackend()
+    // saved audio is labelled with the voice that made it, so switching voices never replays the other voice
+    audioStore.voice = () => this.voice()
     this.player = new Player({ backend: this.backend, store: audioStore, prefetch: PREFETCH_VISIBLE })
     this.player.setSpeed(useSettings.getState().speed)
     usePlayback.setState({ speed: this.player.speed })

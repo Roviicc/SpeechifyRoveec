@@ -149,6 +149,10 @@ describe('audio cache', () => {
     await store.put('b', 0, 'hello', blob(1000), 1)
     expect(await store.get('b', 0, 'hello')).not.toBeNull()
     expect(await store.get('b', 0, 'changed text')).toBeNull()
+    // audio made by another voice is never reused
+    store.voice = () => 'piper'
+    expect(await store.get('b', 0, 'hello')).toBeNull()
+    store.voice = () => ''
     await store.put('b', 1, 'two', blob(1000), 1)
     await new Promise((r) => setTimeout(r, 5))
     await store.put('b', 2, 'three', blob(1000), 1)

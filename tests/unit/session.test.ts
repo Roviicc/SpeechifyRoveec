@@ -5,7 +5,7 @@ vi.mock('../../src/engine/tts/select', async () => {
   const { FakeTtsBackend } = await import('../../src/engine/tts/fakeBackend')
   return { createBackend: () => new FakeTtsBackend(), isFakeVoice: () => true }
 })
-vi.mock('../../src/data/audioCache', () => ({ audioStore: undefined }))
+vi.mock('../../src/data/audioCache', () => ({ audioStore: { voice: () => '', get: async () => null, put: async () => {} } }))
 vi.mock('../../src/data/repo', () => ({ saveProgress: async () => {} }))
 
 /** <audio> stand-in: "plays" for the WAV's duration, then fires ended. */

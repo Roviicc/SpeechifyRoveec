@@ -1,83 +1,27 @@
-/* Google Identity Services (token client) + Google Picker, loaded on demand. */
+/*
+ * Google sign-in + Picker for the main app.
+ *
+ * The app is cross-origin isolated (COOP same-origin + COEP credentialless) so the voice can use WASM threads.
+ * COOP same-origin severs window.opener, which breaks the Google Identity Services popup, and COEP blocks the
+ * Picker's Google iframe. So sign-in and the Picker run on a separate, NON-isolated same-origin page
+ * (/google.html, see src/google/main.ts) opened as a popup. It reports back over a BroadcastChannel and stores
+ * the token in localStorage (both shared by same-origin pages, isolated or not). Drive REST calls themselves are
+ * plain CORS fetches with a Bearer token and work fine under COEP.
+ */
+import {
+  BRIDGE_CHANNEL,
+  BRIDGE_PATH,
+  CONNECTED_KEY,
+  TOKEN_KEY,
+  driveConfigured,
+  storedToken,
+  type BridgeMessage,
+  type BridgeOp,
+  type PickedFile,
+} from './googleShared'
 
-interface TokenResponse {
-  access_token?: string
-  expires_in?: number
-  error?: string
-  error_description?: string
-}
-interface TokenClient {
-  callback: (r: TokenResponse) => void
-  error_callback?: (e: { type: string; message?: string }) => void
-  requestAccessToken(opts?: { prompt?: string }): void
-}
-interface PickerDoc {
-  id: string
-  name: string
-  mimeType: string
-}
-interface PickerBuilder {
-  addView(v: unknown): PickerBuilder
-  enableFeature(f: unknown): PickerBuilder
-  setOAuthToken(t: string): PickerBuilder
-  setDeveloperKey(k: string): PickerBuilder
-  setAppId(id: string): PickerBuilder
-  setCallback(cb: (data: { action: string; docs?: PickerDoc[] }) => void): PickerBuilder
-  setTitle(t: string): PickerBuilder
-  build(): { setVisible(v: boolean): void }
-}
-interface GoogleGlobal {
-  accounts: {
-    oauth2: {
-      initTokenClient(cfg: { client_id: string; scope: string; callback: (r: TokenResponse) => void; error_callback?: (e: { type: string }) => void }): TokenClient
-      revoke(token: string, done?: () => void): void
-    }
-  }
-  picker: {
-    DocsView: new (viewId?: unknown) => { setMimeTypes(m: string): unknown; setIncludeFolders(b: boolean): unknown; setMode(m: unknown): unknown }
-    ViewId: { DOCS: unknown }
-    DocsViewMode: { LIST: unknown }
-    PickerBuilder: new () => PickerBuilder
-    Feature: { MULTISELECT_ENABLED: unknown; SUPPORT_DRIVES: unknown }
-    Action: { PICKED: string; CANCEL: string }
-  }
-}
-declare global {
-  interface Window {
-    google?: GoogleGlobal
-    gapi?: { load(name: string, cb: () => void): void }
-  }
-}
-
-const env = import.meta.env
-export const CLIENT_ID: string = env.VITE_GOOGLE_CLIENT_ID ?? ''
-export const API_KEY: string = env.VITE_GOOGLE_API_KEY ?? ''
-const APP_ID: string = env.VITE_GOOGLE_APP_ID ?? CLIENT_ID.split('-')[0] ?? ''
-export const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.appdata'
-export const driveConfigured = Boolean(CLIENT_ID && API_KEY)
-
-const TOKEN_KEY = 'lumen-gtoken'
-const CONNECTED_KEY = 'lumen-drive-connected'
-
-const scripts = new Map<string, Promise<void>>()
-function loadScript(src: string): Promise<void> {
-  let p = scripts.get(src)
-  if (!p) {
-    p = new Promise((resolve, reject) => {
-      const s = document.createElement('script')
-      s.src = src
-      s.async = true
-      s.onload = () => resolve()
-      s.onerror = () => {
-        scripts.delete(src)
-        reject(new Error(`Couldn't load ${src} (offline?)`))
-      }
-      document.head.append(s)
-    })
-    scripts.set(src, p)
-  }
-  return p
-}
+export { driveConfigured, isConnected, SCOPES, CLIENT_ID, API_KEY } from './googleShared'
+export type { PickedFile } from './googleShared'
 
 export class NeedsSignIn extends Error {
   constructor() {
@@ -86,24 +30,50 @@ export class NeedsSignIn extends Error {
   }
 }
 
-function storedToken(): { value: string; expiresAt: number } | null {
-  try {
-    const t = JSON.parse(localStorage.getItem(TOKEN_KEY) ?? 'null')
-    return t && t.expiresAt > Date.now() + 60_000 ? t : null
-  } catch {
-    return null
-  }
-}
-
-export function isConnected(): boolean {
-  return localStorage.getItem(CONNECTED_KEY) === '1'
-}
-
 export function hasValidToken(): boolean {
   return !!storedToken()
 }
 
-let tokenClient: TokenClient | null = null
+/** How long to wait for the sign-in page to say hello before giving up (it failed to load / was blocked). */
+const HELLO_TIMEOUT_MS = 20_000
+
+/**
+ * Open the sign-in page for `op` and resolve with its final message. Must be called from a user gesture
+ * (window.open runs synchronously here). The page posts `closed` if the user closes it without finishing.
+ */
+export function runBridge(op: BridgeOp, opts: { helloTimeoutMs?: number } = {}): Promise<BridgeMessage> {
+  const id = crypto.randomUUID()
+  const ch = new BroadcastChannel(BRIDGE_CHANNEL)
+  return new Promise<BridgeMessage>((resolve, reject) => {
+    let greeted = false
+    const finish = (fn: () => void) => {
+      clearTimeout(timer)
+      ch.close()
+      fn()
+    }
+    const timer = setTimeout(() => {
+      if (!greeted) finish(() => reject(new Error("Couldn't open the Google sign-in window (offline?).")))
+    }, opts.helloTimeoutMs ?? HELLO_TIMEOUT_MS)
+    ch.onmessage = (ev: MessageEvent<BridgeMessage>) => {
+      const m = ev.data
+      if (!m || m.id !== id) return
+      if (m.type === 'hello') {
+        greeted = true
+        return
+      }
+      finish(() => resolve(m))
+    }
+    const wide = op === 'pick'
+    const w = Math.min(screen.availWidth || 1000, wide ? 1000 : 480)
+    const h = Math.min(screen.availHeight || 700, wide ? 700 : 600)
+    const left = Math.max(0, Math.round(((screen.availWidth || w) - w) / 2))
+    const top = Math.max(0, Math.round(((screen.availHeight || h) - h) / 2))
+    // Note: with COOP the returned WindowProxy is severed (it reads as closed), so only null = blocked is useful.
+    const win = window.open(`${BRIDGE_PATH}?op=${op}&id=${id}`, 'lumen-google', `popup,width=${w},height=${h},left=${left},top=${top}`)
+    if (!win) finish(() => reject(new Error('Pop-up blocked. Allow pop-ups for this site, then try again.')))
+  })
+}
+
 let inflight: Promise<string> | null = null
 
 /** Get an access token. Non-interactive calls only use a cached, unexpired token. */
@@ -112,23 +82,15 @@ export async function getToken(interactive = false): Promise<string> {
   if (t) return t.value
   if (!interactive) throw new NeedsSignIn()
   if (!driveConfigured) throw new Error('Google Drive is not configured (set VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY).')
-  inflight ??= (async () => {
-    await loadScript('https://accounts.google.com/gsi/client')
-    const g = window.google!
-    return new Promise<string>((resolve, reject) => {
-      tokenClient ??= g.accounts.oauth2.initTokenClient({ client_id: CLIENT_ID, scope: SCOPES, callback: () => {} })
-      tokenClient.callback = (r) => {
-        if (r.error || !r.access_token) return reject(new Error(r.error_description || r.error || 'Sign-in failed'))
-        localStorage.setItem(TOKEN_KEY, JSON.stringify({ value: r.access_token, expiresAt: Date.now() + (r.expires_in ?? 3600) * 1000 }))
-        localStorage.setItem(CONNECTED_KEY, '1')
-        resolve(r.access_token)
-      }
-      tokenClient.error_callback = (e) => reject(new Error(e.type === 'popup_closed' ? 'Sign-in was cancelled' : e.message || e.type))
-      tokenClient.requestAccessToken({ prompt: isConnected() ? '' : 'consent' })
+  inflight ??= runBridge('token')
+    .then((m) => {
+      if (m.type === 'token') return m.token
+      if (m.type === 'error') throw new Error(m.message)
+      throw new Error('Sign-in was cancelled')
     })
-  })().finally(() => {
-    inflight = null
-  })
+    .finally(() => {
+      inflight = null
+    })
   return inflight
 }
 
@@ -140,33 +102,21 @@ export async function disconnect() {
   const t = storedToken()
   localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(CONNECTED_KEY)
-  if (t && window.google) window.google.accounts.oauth2.revoke(t.value)
+  if (t) {
+    // fire-and-forget revoke; no-cors keeps it COEP-compatible (we don't need the response)
+    await fetch('https://oauth2.googleapis.com/revoke', {
+      method: 'POST',
+      mode: 'no-cors',
+      body: new URLSearchParams({ token: t.value }),
+    }).catch(() => {})
+  }
 }
 
-/** Show the Google Picker for EPUB/PDF files. Resolves with the picked files (empty if cancelled). */
-export async function pickDriveFiles(): Promise<PickerDoc[]> {
-  const token = await getToken(true)
-  await loadScript('https://apis.google.com/js/api.js')
-  await new Promise<void>((r) => window.gapi!.load('picker', () => r()))
-  const p = window.google!.picker
-  return new Promise((resolve) => {
-    const view = new p.DocsView(p.ViewId.DOCS)
-    view.setMimeTypes('application/pdf,application/epub+zip')
-    view.setIncludeFolders(true)
-    view.setMode(p.DocsViewMode.LIST)
-    new p.PickerBuilder()
-      .addView(view)
-      .enableFeature(p.Feature.MULTISELECT_ENABLED)
-      .enableFeature(p.Feature.SUPPORT_DRIVES)
-      .setOAuthToken(token)
-      .setDeveloperKey(API_KEY)
-      .setAppId(APP_ID)
-      .setTitle('Choose books')
-      .setCallback((data) => {
-        if (data.action === p.Action.PICKED) resolve(data.docs ?? [])
-        else if (data.action === p.Action.CANCEL) resolve([])
-      })
-      .build()
-      .setVisible(true)
-  })
+/** Show the Google Picker for EPUB/PDF files (in the sign-in window). Resolves with the picked files (empty if cancelled). */
+export async function pickDriveFiles(): Promise<PickedFile[]> {
+  if (!driveConfigured) throw new Error('Google Drive is not configured (set VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY).')
+  const m = await runBridge('pick')
+  if (m.type === 'picked') return m.docs
+  if (m.type === 'error') throw new Error(m.message)
+  return []
 }

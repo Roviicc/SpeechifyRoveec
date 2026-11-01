@@ -171,3 +171,107 @@ describe('Player', () => {
     expect(player.state).toBe('ended')
   })
 })
+
+describe('Player edge cases', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  it('a fade-out survives the advance to the next sentence (sleep timer)', async () => {
+    const { player } = setup()
+    player.play()
+    await flush()
+    // sentence 0 lasts 0.78 s, much shorter than the 5 s fade
+    const done = player.fadeOutAndPause(5000)
+    await vi.advanceTimersByTimeAsync(5100)
+    await done
+    expect(player.index).toBeGreaterThan(0)
+    expect(player.state).toBe('paused')
+  })
+
+  it('the fade promise settles when the fade is cancelled by a user action', async () => {
+    const { player } = setup()
+    player.play()
+    await flush()
+    let settled = false
+    void player.fadeOutAndPause(5000).then(() => (settled = true))
+    await vi.advanceTimersByTimeAsync(100)
+    player.pause()
+    await flush()
+    expect(settled).toBe(true)
+  })
+
+  it('pausing while a resume is still starting does not report an error', async () => {
+    const { player, audio } = setup()
+    player.play()
+    await flush()
+    player.pause()
+    // a real <audio> rejects a pending play() with AbortError when pause() interrupts it
+    let reject: ((e: Error) => void) | null = null
+    audio.play = () =>
+      new Promise<void>((_, rej) => {
+        reject = rej
+      })
+    player.play()
+    player.pause()
+    const err = new Error('The play() request was interrupted by a call to pause().')
+    err.name = 'AbortError'
+    reject!(err)
+    await flush()
+    expect(player.state).toBe('paused')
+  })
+
+  it('play() while already playing does not restart the sentence', async () => {
+    const { player, audio } = setup()
+    player.play()
+    await flush()
+    await vi.advanceTimersByTimeAsync(300)
+    audio.currentTime = 0.3
+    player.play()
+    await flush()
+    expect(player.state).toBe('playing')
+    expect(audio.currentTime).toBe(0.3)
+  })
+
+  it('a late duplicate generation does not revoke the URL that is playing', async () => {
+    const revoked: string[] = []
+    // like the Kokoro worker: one request at a time, and a running request still finishes after cancel()
+    const backend = new FakeTtsBackend()
+    const inner = backend.generate.bind(backend)
+    let queue: Promise<unknown> = Promise.resolve()
+    backend.generate = (text, epoch) => {
+      const job = queue.then(() => new Promise((r) => setTimeout(r, 100))).then(() => inner(text, epoch))
+      queue = job.catch(() => {})
+      return job
+    }
+    backend.cancel = () => {}
+    const audio = new FakeAudio()
+    let n = 0
+    const player = new Player({
+      backend,
+      audio,
+      prefetch: 1,
+      createUrl: () => {
+        const url = `blob:${++n}`
+        audio.durations.set(url, 10)
+        return url
+      },
+      revokeUrl: (u) => revoked.push(u),
+    })
+    player.setSource({ bookId: 'b', count: texts.length, text: (i) => texts[i] })
+    player.play()
+    await vi.advanceTimersByTimeAsync(50)
+    // seek away and back while sentence 0 is generating: a second job for sentence 0 is queued
+    player.seek(1)
+    player.seek(0)
+    await vi.advanceTimersByTimeAsync(100)
+    // the first job finished; tapping the same sentence plays its audio
+    player.seek(0, 0.1)
+    await flush()
+    expect(player.state).toBe('playing')
+    const playing = audio.src
+    await vi.advanceTimersByTimeAsync(600)
+    await flush()
+    expect(audio.src).toBe(playing)
+    expect(revoked).not.toContain(playing)
+  })
+})

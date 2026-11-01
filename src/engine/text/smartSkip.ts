@@ -5,14 +5,27 @@ const SUPERSCRIPTS = '⁰¹²³⁴⁵⁶⁷⁸⁹'
 // [12], [3-5], [1, 4, 7], [12a]
 const BRACKET_CITATION = /\[\s*\d{1,4}[a-z]?(?:\s*[-–,]\s*\d{1,4}[a-z]?)*\s*\]/g
 // (Smith, 2020), (Smith & Jones 2019; Lee et al., 2021, p. 4), (Smith 2020a)
-const AUTHOR_YEAR =
-  /\((?:see |cf\. |e\.g\., )?[A-Z][\p{L}'’-]+(?:\s(?:et al\.|and|&)\s?[A-Z]?[\p{L}'’-]*)*,?\s(?:1[6-9]|20)\d{2}[a-z]?(?:,\s*pp?\.\s*\d+(?:[-–]\d+)?)?(?:;\s*[A-Z][\p{L}'’-]+(?:\s(?:et al\.|and|&)\s?[A-Z]?[\p{L}'’-]*)*,?\s(?:1[6-9]|20)\d{2}[a-z]?(?:,\s*pp?\.\s*\d+(?:[-–]\d+)?)?)*\)/gu
+// but not dates such as "(March 2020)", "(Summer 2019)" or "(Since 1990)"
+const NOT_AUTHOR =
+  '(?!(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sept?|Oct|Nov|Dec|Spring|Summer|Autumn|Fall|Winter|Since|Until|Till|Before|After|From|In|By|Circa|Early|Late|Mid)\\.?,?\\s)'
+const AUTHOR_YEAR = new RegExp(
+  String.raw`\((?:see |cf\. |e\.g\., )?${NOT_AUTHOR}[A-Z][\p{L}'’-]+(?:\s(?:et al\.|and|&)\s?[A-Z]?[\p{L}'’-]*)*,?\s(?:1[6-9]|20)\d{2}[a-z]?(?:,\s*pp?\.\s*\d+(?:[-–]\d+)?)?(?:;\s*[A-Z][\p{L}'’-]+(?:\s(?:et al\.|and|&)\s?[A-Z]?[\p{L}'’-]*)*,?\s(?:1[6-9]|20)\d{2}[a-z]?(?:,\s*pp?\.\s*\d+(?:[-–]\d+)?)?)*\)`,
+  'gu',
+)
 // URLs and bare www. addresses (trailing punctuation trimmed below)
 const URL = /\b(?:https?:\/\/|www\.)[^\s<>"“”]+/gi
-// Unicode superscript digits and footnote symbols directly after a word/punctuation
-const SUPERSCRIPT_MARK = new RegExp(`[${SUPERSCRIPTS}]+|(?<=[\\p{L}.,;:!?”’"')])[*†‡§]+`, 'gu')
+// Unicode superscript digits and footnote symbols directly after a word/punctuation —
+// but not exponents: after a digit ("10²") or a one/two-letter symbol or unit ("m²", "mc²", "km²")
+const SUPERSCRIPT_MARK = new RegExp(
+  `(?<!\\p{N}|(?:^|[^\\p{L}])\\p{L}{1,2})[${SUPERSCRIPTS}]+|(?<=[\\p{L}.,;:!?”’"')])[*†‡§]+`,
+  'gu',
+)
+// abbreviations that are followed by a number: "p.12", "No.5", "vol.3"
+const NUMBERED_ABBR = ['p', 'pp', 'no', 'nos', 'vol', 'vols', 'fig', 'figs', 'ch', 'chap', 'sec', 'eq', 'eqs', 'op', 'art', 'ref', 'tab', 'v']
+  .flatMap((w) => [w, w[0].toUpperCase() + w.slice(1)])
+  .join('|')
 // "...end of a sentence.12 Next" — digits glued after sentence punctuation
-const GLUED_NUMBER = /(?<=[\p{Ll}][.,;:!?”’"')])\d{1,3}(?=\s|$)/gu
+const GLUED_NUMBER = new RegExp(`(?<=[\\p{Ll}][.,;:!?”’"')])(?<!(?:^|[^\\p{L}])(?:${NUMBERED_ABBR})\\.)\\d{1,3}(?=\\s|$)`, 'gu')
 
 /** Inline replacements (skip / say-as) for citations, footnote markers and URLs. */
 export function findInlineSkips(

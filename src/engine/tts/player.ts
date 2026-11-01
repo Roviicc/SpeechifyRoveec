@@ -75,6 +75,7 @@ export class Player {
   private pendingOffset: SeekOffset = 0
   private listeners: Partial<Record<keyof Events, Set<(v: never) => void>>> = {}
   private fadeTimer: ReturnType<typeof setInterval> | null = null
+  private fadeDone: (() => void) | null = null
   private rtfSamples: number[] = []
 
   constructor(opts: PlayerOptions) {
@@ -190,9 +191,11 @@ export class Player {
         void this.store?.put(src.bookId, i, text, blob, duration).catch(() => {})
       }
       if (this.source !== src) throw new CancelledError()
+      // a duplicate job (e.g. from before a seek) already produced this sentence: keep that
+      // chunk, its URL may be the one playing right now
+      const existing = this.ready.get(i)
+      if (existing) return existing
       const chunk = { url: this.createUrl(blob), duration }
-      const old = this.ready.get(i)
-      if (old) this.revokeUrl(old.url)
       this.ready.set(i, chunk)
       this.emit('chunk', { index: i, duration })
       return chunk
@@ -218,10 +221,11 @@ export class Player {
     }
   }
 
-  private async playIndex(i: number, offset: SeekOffset = 0) {
+  private async playIndex(i: number, offset: SeekOffset = 0, keepFade = false) {
     if (!this.source || !this.source.count) return
     const token = ++this.token
-    this.cancelFade()
+    // a sleep-timer fade carries on across the natural advance to the next sentence
+    if (!keepFade) this.cancelFade()
     this.audio.pause()
     this.loadedIndex = -1
     if (this.index !== i) {
@@ -266,7 +270,7 @@ export class Player {
   private onEnded() {
     if (!this.source || this.loadedIndex !== this.index) return
     if (this.index + 1 < this.source.count) {
-      void this.playIndex(this.index + 1)
+      void this.playIndex(this.index + 1, 0, true)
     } else {
       this.loadedIndex = -1
       this.setState('ended')
@@ -280,11 +284,20 @@ export class Player {
 
   play() {
     if (!this.source) return
-    if (this.state === 'paused' && this.loadedIndex === this.index) {
+    // already playing: don't restart the sentence (e.g. a redundant lock-screen "play")
+    if (this.state === 'buffering' || (this.state === 'playing' && !this.audio.paused)) return
+    // paused by us, or by the system behind our back (audio focus loss): resume in place
+    if ((this.state === 'paused' || this.state === 'playing') && this.loadedIndex === this.index) {
+      const token = ++this.token
       this.audio.playbackRate = this.speed
       this.audio.play().then(
-        () => this.setState('playing'),
-        (e) => this.fail(e as Error),
+        () => token === this.token && this.setState('playing'),
+        (e: Error) => {
+          // interrupted by pause()/seek() (AbortError) or by a newer action: not an error
+          if (token !== this.token || e?.name === 'AbortError') return
+          if (e?.name === 'NotAllowedError') this.setState('paused')
+          else this.fail(e)
+        },
       )
       this.setState('playing')
       return
@@ -354,24 +367,28 @@ export class Player {
     return new Promise((resolve) => {
       const steps = Math.max(1, Math.round(ms / 50))
       let n = 0
+      this.fadeDone = resolve
       this.fadeTimer = setInterval(() => {
         n++
         this.audio.volume = Math.max(0, 1 - n / steps)
         if (n >= steps) {
           this.pause()
           this.audio.volume = 1
-          resolve()
         }
       }, 50)
     })
   }
 
+  /** Stop a fade in progress (restoring the volume) and settle its promise. */
   private cancelFade() {
     if (this.fadeTimer) {
       clearInterval(this.fadeTimer)
       this.fadeTimer = null
       this.audio.volume = 1
     }
+    const done = this.fadeDone
+    this.fadeDone = null
+    done?.()
   }
 
   /** Release everything (used by tests). */

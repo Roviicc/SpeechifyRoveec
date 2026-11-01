@@ -7,6 +7,9 @@ import { startSyncLoop } from './sync/syncService'
 import { importBook } from './features/import/importBook'
 import { navigate } from './app/router'
 
+// create the playback session before React renders (its constructor updates stores)
+session()
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />

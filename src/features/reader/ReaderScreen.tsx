@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Bookmark, ChevronDown, FileImage, FileText, ListTree, Locate, MoreHorizontal, Moon, NotebookPen, Search, Type, X } from 'lucide-react'
 import { session } from '../../app/session'
 import { navigate } from '../../app/router'
@@ -22,7 +22,7 @@ import {
   updateHighlight,
 } from '../../data/repo'
 import { reparseBook } from '../import/importBook'
-import { syncSoon } from '../../sync/syncService'
+import { onRemoteProgress, syncSoon } from '../../sync/syncService'
 import { IconButton } from '../../ui/controls'
 import { Sheet, anySheetOpen } from '../../ui/Sheet'
 import { PlayerBar } from './PlayerBar'
@@ -49,6 +49,8 @@ export function ReaderScreen({ bookId }: { bookId: string }) {
   const [noteText, setNoteText] = useState('')
   const [container, setContainer] = useState<HTMLDivElement | null>(null)
   const [surface, setSurface] = useState<TextSurface | null>(null)
+  const searchTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(searchTimer.current), [])
   const pdfMode = useSettings((s) => s.pdfMode)
   const setSettings = useSettings((s) => s.set)
   const current = usePlayback((s) => s.index)
@@ -98,6 +100,18 @@ export function ReaderScreen({ bookId }: { bookId: string }) {
   useEffect(() => {
     if (state === 'playing') setResume(null)
   }, [state])
+
+  // progress synced from another device: offer to continue there
+  useEffect(() => {
+    const off = onRemoteProgress(async (ids) => {
+      if (!ids.includes(bookId) || session().player.isActive) return
+      const p = await getProgress(bookId)
+      if (p && p.sentence !== session().player.index) setResume(p)
+    })
+    return () => {
+      off()
+    }
+  }, [bookId])
 
   const mode: 'text' | 'original' = doc?.type === 'pdf' ? pdfMode : 'text'
   const sync = useReaderSync(container, surface, index)
@@ -273,7 +287,11 @@ export function ReaderScreen({ bookId }: { bookId: string }) {
             <p className="min-w-0 flex-1 text-[15px]">
               Continue from <b className="font-semibold">{resume.sectionTitle || 'where you left off'}</b>?
             </p>
-            <button className="h-10 rounded-full bg-primary px-4 text-sm font-semibold text-on-primary" onClick={() => (session().play(), setResume(null))} data-testid="resume-continue">
+            <button className="h-10 rounded-full bg-primary px-4 text-sm font-semibold text-on-primary" onClick={() => {
+                if (resume && resume.sentence !== session().player.index) session().seekTo(resume.locator, true)
+                else session().play()
+                setResume(null)
+              }} data-testid="resume-continue">
               Continue
             </button>
             <IconButton
@@ -332,7 +350,8 @@ export function ReaderScreen({ bookId }: { bookId: string }) {
           onJump={(hit, play) => {
             highlighter.setSearchHit(hit)
             jumpTo({ block: hit.block, offset: hit.start, section: hit.section }, play)
-            setTimeout(() => highlighter.setSearchHit(null), 4000)
+            clearTimeout(searchTimer.current)
+            searchTimer.current = setTimeout(() => highlighter.setSearchHit(null), 4000)
           }}
         />
       )}

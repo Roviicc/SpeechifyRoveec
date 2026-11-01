@@ -1,23 +1,7 @@
-import type { WorkerIn, WorkerOut } from './protocol'
-import { CancelledError, type GeneratedAudio, type LoadProgress, type TtsBackend, type TtsInfo } from './types'
-import {
-  attemptChain,
-  CPU_TEST_TIMEOUT_MS,
-  getAutoResult,
-  getEnginePref,
-  GPU_MAX_RTF,
-  GPU_TEST_TIMEOUT_MS,
-  setAutoResult,
-  setSingleThreadOnly,
-  SILENCE_TIMEOUT_MS,
-  singleThreadOnly,
-  type Attempt,
-} from './engineChoice'
-
-interface Pending {
-  resolve: (a: GeneratedAudio) => void
-  reject: (e: Error) => void
-}
+import type { GeneratedAudio, LoadProgress, TtsBackend, TtsInfo } from './types'
+import { attemptChain, getAutoResult, getEnginePref, setAutoResult, setSingleThreadOnly, singleThreadOnly, type Attempt } from './engineChoice'
+import { CPU_TEST_TIMEOUT_MS, GPU_MAX_RTF, GPU_TEST_TIMEOUT_MS, SILENCE_TIMEOUT_MS } from './limits'
+import { WorkerVoiceClient } from './workerVoiceClient'
 
 async function gpuAvailable(): Promise<boolean> {
   const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } }).gpu
@@ -53,14 +37,17 @@ function requestedThreads(): number | undefined {
   return Number.isInteger(n) && n > 0 ? n : undefined
 }
 
-/** Kokoro-82M running in a dedicated Web Worker (WebGPU fp32, or WASM q8 fallback). */
+/**
+ * Kokoro-82M running in a dedicated Web Worker. Tries engines in order (see attemptChain): GPU (WebGPU fp32,
+ * speed-tested in 'auto'), then threaded CPU, then single-thread CPU (WASM q8), moving on when one stalls.
+ */
 export class KokoroBackend implements TtsBackend {
-  info: TtsInfo | null = null
-  private worker: Worker | null = null
+  private client = new WorkerVoiceClient()
   private initPromise: Promise<TtsInfo> | null = null
-  private pending = new Map<number, Pending>()
-  private nextId = 1
-  private progressByFile = new Map<string, { loaded: number; total: number }>()
+
+  get info(): TtsInfo | null {
+    return this.client.info
+  }
 
   init(onProgress?: (p: LoadProgress) => void): Promise<TtsInfo> {
     this.initPromise ??= this.start(onProgress)
@@ -76,6 +63,7 @@ export class KokoroBackend implements TtsBackend {
       try {
         const info = await this.launch(a, onProgress)
         if (a.device === 'webgpu' && a.speedTest) setAutoResult({ device: 'webgpu', gpuRtf: info.testRtf ?? null, at: Date.now() })
+        // threaded CPU hung but single-thread worked: skip the threaded attempt next time
         if (a.device === 'wasm' && a.threads === 1 && k > 0 && chain[k - 1].device === 'wasm') setSingleThreadOnly(true)
         if (gpuRejected) info.gpuRejected = gpuRejected
         return info
@@ -93,7 +81,7 @@ export class KokoroBackend implements TtsBackend {
           gpuRejected = { rtf: e.rtf }
           if (pref === 'auto') setAutoResult({ device: 'wasm', gpuRtf: e.rtf, at: Date.now() })
         }
-        this.progressByFile.clear()
+        this.client.clearProgress()
       }
     }
     throw new Error('No voice engine available')
@@ -102,114 +90,37 @@ export class KokoroBackend implements TtsBackend {
   /**
    * Start a worker for one attempt. Rejects with EngineUnusable if it stops responding (no message for a long
    * time after the download, or the speed test never finishes) or, with speedTest, if the GPU is slower than real time.
+   * A GPU that fails to run the model at all also counts as unusable.
    */
   private launch(a: Attempt, onProgress?: (p: LoadProgress) => void): Promise<TtsInfo> {
-    const worker = new Worker(new URL('./kokoro.worker.ts', import.meta.url), { type: 'module' })
-    this.worker = worker
-    let silence: ReturnType<typeof setTimeout> | undefined
-    let testTimer: ReturnType<typeof setTimeout> | undefined
-    return new Promise<TtsInfo>((resolve, reject) => {
-      let settled = false
-      const stop = () => {
-        settled = true
-        clearTimeout(silence)
-        clearTimeout(testTimer)
-      }
-      const fail = (err: Error) => {
-        if (settled) return
-        stop()
-        worker.terminate()
-        if (this.worker === worker) this.worker = null
-        reject(err)
-      }
-      const downloading = () => [...this.progressByFile.values()].some((f) => f.loaded < f.total)
-      const armSilence = () => {
-        clearTimeout(silence)
-        silence = setTimeout(() => fail(downloading() ? new DownloadStalled() : new EngineUnusable('stuck')), SILENCE_TIMEOUT_MS)
-      }
-      armSilence()
-      worker.onmessage = (ev: MessageEvent<WorkerOut>) => {
-        const m = ev.data
-        if (!settled) armSilence()
-        switch (m.type) {
-          case 'progress': {
-            if (m.file && m.total) this.progressByFile.set(m.file, { loaded: m.loaded, total: m.total })
-            let loaded = 0
-            let total = 0
-            for (const f of this.progressByFile.values()) {
-              loaded += f.loaded
-              total += f.total
-            }
-            onProgress?.({ fraction: total ? loaded / total : null, loadedBytes: loaded, totalBytes: total, status: loaded >= total ? 'loading' : 'downloading' })
-            break
-          }
-          case 'testing':
-            onProgress?.({ fraction: null, loadedBytes: 0, totalBytes: 0, status: 'loading' })
-            clearTimeout(silence)
-            testTimer = setTimeout(() => fail(new EngineUnusable('stuck')), a.device === 'webgpu' ? GPU_TEST_TIMEOUT_MS : CPU_TEST_TIMEOUT_MS)
-            break
-          case 'ready':
-            if (settled) return
-            if (a.speedTest && (m.info.testRtf ?? 0) > GPU_MAX_RTF) return fail(new EngineUnusable('slow', m.info.testRtf ?? null))
-            stop()
-            this.info = m.info
-            onProgress?.({ fraction: 1, loadedBytes: 0, totalBytes: 0, status: 'ready' })
-            resolve(m.info)
-            break
-          case 'audio': {
-            const p = this.pending.get(m.reqId)
-            this.pending.delete(m.reqId)
-            p?.resolve({ wav: new Blob([m.wav], { type: 'audio/wav' }), duration: m.duration, genMs: m.genMs })
-            break
-          }
-          case 'cancelled': {
-            const p = this.pending.get(m.reqId)
-            this.pending.delete(m.reqId)
-            p?.reject(new CancelledError())
-            break
-          }
-          case 'error':
-            if (m.reqId !== undefined) {
-              const p = this.pending.get(m.reqId)
-              this.pending.delete(m.reqId)
-              p?.reject(new Error(m.message))
-            } else if (a.device === 'webgpu') {
-              // a GPU that fails to run the model counts as unusable
-              fail(new EngineUnusable('stuck'))
-            } else {
-              fail(new Error(m.message))
-            }
-        }
-      }
-      worker.onerror = (e) => fail(a.device === 'webgpu' ? new EngineUnusable('stuck') : new Error(e.message || 'Voice worker failed to start'))
-      this.send({ type: 'init', device: a.device, dtype: DTYPE[a.device], threads: a.threads ?? requestedThreads() })
-    })
-  }
-
-  reset() {
-    this.worker?.terminate()
-    this.worker = null
-    this.initPromise = null
-    this.info = null
-    this.progressByFile.clear()
-    for (const p of this.pending.values()) p.reject(new CancelledError())
-    this.pending.clear()
-  }
-
-  private send(msg: WorkerIn) {
-    this.worker?.postMessage(msg)
+    const gpu = a.device === 'webgpu'
+    return this.client.launch(
+      () => new Worker(new URL('./kokoro.worker.ts', import.meta.url), { type: 'module' }),
+      {
+        init: { type: 'init', device: a.device, dtype: DTYPE[a.device], threads: a.threads ?? requestedThreads() },
+        silenceMs: SILENCE_TIMEOUT_MS,
+        silenceError: (downloading) => (downloading ? new DownloadStalled() : new EngineUnusable('stuck')),
+        testTimeoutMs: gpu ? GPU_TEST_TIMEOUT_MS : CPU_TEST_TIMEOUT_MS,
+        testTimeoutError: () => new EngineUnusable('stuck'),
+        startError: (message) => (gpu ? new EngineUnusable('stuck') : new Error(message)),
+        crashError: (e) => (gpu ? new EngineUnusable('stuck') : new Error(e.message || 'Voice worker failed to start')),
+        rejectReady: (info) => (a.speedTest && (info.testRtf ?? 0) > GPU_MAX_RTF ? new EngineUnusable('slow', info.testRtf ?? null) : null),
+      },
+      onProgress,
+    )
   }
 
   async generate(text: string, epoch: number): Promise<GeneratedAudio> {
     await this.init()
-    const reqId = this.nextId++
-    return new Promise((resolve, reject) => {
-      this.pending.set(reqId, { resolve, reject })
-      this.send({ type: 'generate', reqId, epoch, text })
-    })
+    return this.client.generate(text, epoch)
   }
 
   cancel(epoch: number): void {
-    this.send({ type: 'cancel', epoch })
+    this.client.cancel(epoch)
+  }
+
+  reset() {
+    this.client.reset()
+    this.initPromise = null
   }
 }

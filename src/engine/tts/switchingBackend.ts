@@ -1,6 +1,7 @@
 import { KokoroBackend } from './kokoroBackend'
 import { PiperBackend } from './piperBackend'
-import { effectiveVoice, KOKORO_MAX_RTF, setAutoVoice, shouldTestKokoro } from './engineChoice'
+import { effectiveVoice, setAutoVoice, shouldTestKokoro } from './voiceChoice'
+import { KOKORO_MAX_RTF } from './limits'
 import type { GeneratedAudio, LoadProgress, TtsBackend, TtsInfo, VoiceModel } from './types'
 
 /**

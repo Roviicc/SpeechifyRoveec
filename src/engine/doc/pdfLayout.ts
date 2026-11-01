@@ -83,45 +83,51 @@ export function markRepeatedLines(pages: PdfLine[][]) {
   const zone = 2
   const counts = new Map<string, number>()
   const keyOf = (l: PdfLine, top: boolean) => `${top ? 't' : 'b'}|${normalizeRepeatLine(l.text)}`
-  for (const lines of pages) {
+  // zones are decided by position on the page, not by content-stream order
+  const zones = pages.map((lines) => {
+    const byY = [...lines].sort((a, b) => b.y - a.y)
+    return { top: new Set(byY.slice(0, zone)), bottom: new Set(byY.slice(-zone)) }
+  })
+  pages.forEach((_, p) => {
     const seen = new Set<string>()
-    lines.slice(0, zone).forEach((l) => seen.add(keyOf(l, true)))
-    lines.slice(-zone).forEach((l) => seen.add(keyOf(l, false)))
+    zones[p].top.forEach((l) => seen.add(keyOf(l, true)))
+    zones[p].bottom.forEach((l) => seen.add(keyOf(l, false)))
     for (const k of seen) counts.set(k, (counts.get(k) ?? 0) + 1)
-  }
+  })
   const minRepeats = Math.max(3, Math.ceil(pages.length * 0.25))
-  for (const lines of pages) {
-    lines.forEach((l, i) => {
-      const top = i < zone
-      const bottom = i >= lines.length - zone
-      if (!top && !bottom) return
+  pages.forEach((lines, p) => {
+    for (const l of lines) {
+      const top = zones[p].top.has(l)
+      const bottom = zones[p].bottom.has(l)
+      if (!top && !bottom) continue
       if (isPageNumberLine(l.text)) {
         l.role = 'pagenum'
-        return
+        continue
       }
-      if (pages.length < 3) return
+      if (pages.length < 3) continue
       if (top && (counts.get(keyOf(l, true)) ?? 0) >= minRepeats) l.role = 'header'
       else if (bottom && (counts.get(keyOf(l, false)) ?? 0) >= minRepeats) l.role = 'footer'
-    })
-  }
+    }
+  })
 }
 
-function median(xs: number[]): number {
+function quantile(xs: number[], q: number): number {
   if (!xs.length) return 0
   const s = [...xs].sort((a, b) => a - b)
-  return s[s.length >> 1]
+  return s[Math.min(s.length - 1, Math.floor(s.length * q))]
 }
 
 /** Assemble lines into paragraphs/headings, de-hyphenating wrapped words. */
 export function linesToBlocks(lines: PdfLine[], page: number, bodyHeight?: number): Block[] {
   const body = lines.filter((l) => !l.role)
-  const hMed = bodyHeight ?? median(body.map((l) => l.h))
+  const hMed = bodyHeight ?? quantile(body.map((l) => l.h), 0.5)
   const gaps: number[] = []
   for (let i = 1; i < body.length; i++) {
     const g = body[i - 1].y - body[i].y
     if (g > 0) gaps.push(g)
   }
-  const lineGap = median(gaps) || hMed * 1.2
+  // typical line spacing: a low quantile so paragraph gaps don't inflate it
+  const lineGap = quantile(gaps, 0.3) || hMed * 1.2
   const minX = Math.min(...body.map((l) => l.x))
   const maxW = Math.max(...body.map((l) => l.width))
 

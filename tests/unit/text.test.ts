@@ -17,6 +17,11 @@ describe('splitSentences', () => {
     ])
   })
 
+  it('keeps "Chapter III." headings together', () => {
+    expect(sentences('Chapter III. A Caucus-Race and a Long Tale')).toEqual(['Chapter III. A Caucus-Race and a Long Tale'])
+    expect(sentences('Part 2. The Return')).toEqual(['Part 2. The Return'])
+  })
+
   it('handles quotes, ellipses and question marks', () => {
     expect(sentences('“Is it true?” she asked. Well… maybe. Yes!')).toEqual(['“Is it true?” she asked.', 'Well… maybe.', 'Yes!'])
   })

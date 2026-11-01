@@ -25,6 +25,8 @@ function trimSpan(text: string, start: number, end: number): Span | null {
 function endsWithAbbreviation(text: string, span: Span): boolean {
   const s = text.slice(span.start, span.end)
   if (!s.endsWith('.')) return false
+  // "Chapter III." / "Part 2." / "Book IV." headings
+  if (/(?:^|\s)(?:chapter|part|book|vol|volume|act|scene|section|appendix|letter|canto|stave)\s+(?:[ivxlcdm]+|\d+)\.$/i.test(s)) return true
   const m = /(?:^|[\s(“"'‘])([A-Za-z][A-Za-z.]*)\.$/.exec(s)
   if (!m) return false
   const word = m[1].toLowerCase()

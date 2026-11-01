@@ -61,6 +61,7 @@ export function extractBlocks(body: Element): Block[] {
   let buf = ''
   let notes: Array<[number, number]> = []
   let ids: string[] = []
+  let inNote = false
 
   const append = (raw: string) => {
     let t = raw.replace(/[\s\u00a0]+/g, ' ')
@@ -99,12 +100,11 @@ export function extractBlocks(body: Element): Block[] {
         flush(childKind)
       } else if (tag === 'br') {
         append(' ')
-      } else if (isNoteRef(child)) {
-        if (buf && !buf.endsWith(' ')) {
-          /* glued marker */
-        }
+      } else if (!inNote && isNoteRef(child)) {
         const start = buf.length
+        inNote = true
         walk(child, kind)
+        inNote = false
         if (buf.length > start) notes.push([start, buf.length])
       } else if (tag === 'img') {
         // images are not read

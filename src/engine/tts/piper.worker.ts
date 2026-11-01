@@ -1,8 +1,7 @@
 /// <reference lib="webworker" />
 import { TtsSession } from '@mintplex-labs/piper-tts-web'
-import { encodeWav, trimSilence } from './wav'
+import { serveVoice, type Samples } from './serveVoice'
 import { PIPER_VOICE } from './types'
-import type { WorkerIn, WorkerOut } from './protocol'
 
 declare const self: DedicatedWorkerGlobalScope
 
@@ -23,19 +22,9 @@ const WASM_PATHS = {
   piperWasm: 'https://cdn.jsdelivr.net/npm/@diffusionstudio/piper-wasm@1.0.0/build/piper_phonemize.wasm',
 }
 
-let tts: TtsSession | null = null
-let minEpoch = 0
-const queue: Array<{ reqId: number; epoch: number; text: string }> = []
-let busy = false
-
-const post = (msg: WorkerOut, transfer: Transferable[] = []) => self.postMessage(msg, transfer)
-
-/** Generate one sentence and return 16-bit WAV + duration (silence-trimmed like Kokoro). */
-async function speak(text: string): Promise<{ wav: ArrayBuffer; duration: number }> {
-  const blob = await tts!.predict(text)
-  const buf = await blob.arrayBuffer()
+/** Read the samples out of the library's WAV output (16-bit or float, wherever its "data" chunk is). */
+function decodeWav(buf: ArrayBuffer): Samples {
   const view = new DataView(buf)
-  // locate the "data" chunk of the library's WAV and read 16-bit or float samples
   const sampleRate = view.getUint32(24, true)
   const bits = view.getUint16(34, true)
   let off = 12
@@ -51,69 +40,22 @@ async function speak(text: string): Promise<{ wav: ArrayBuffer; duration: number
     }
     off += 8 + size + (size % 2)
   }
-  let samples: Float32Array
-  if (bits === 32) samples = new Float32Array(buf.slice(dataOff, dataOff + dataLen))
-  else {
-    const n = dataLen >> 1
-    samples = new Float32Array(n)
-    for (let i = 0; i < n; i++) samples[i] = view.getInt16(dataOff + i * 2, true) / 0x8000
-  }
-  const trimmed = trimSilence(samples, sampleRate)
-  return { wav: encodeWav(trimmed, sampleRate), duration: trimmed.length / sampleRate }
+  if (bits === 32) return { samples: new Float32Array(buf.slice(dataOff, dataOff + dataLen)), sampleRate }
+  const samples = new Float32Array(dataLen >> 1)
+  for (let i = 0; i < samples.length; i++) samples[i] = view.getInt16(dataOff + i * 2, true) / 0x8000
+  return { samples, sampleRate }
 }
 
-async function pump() {
-  if (busy || !tts) return
-  busy = true
-  try {
-    while (queue.length) {
-      const job = queue.shift()!
-      if (job.epoch < minEpoch) {
-        post({ type: 'cancelled', reqId: job.reqId })
-        continue
-      }
-      try {
-        const t0 = performance.now()
-        const { wav, duration } = await speak(job.text)
-        post({ type: 'audio', reqId: job.reqId, epoch: job.epoch, wav, duration, genMs: performance.now() - t0 }, [wav])
-      } catch (e) {
-        post({ type: 'error', reqId: job.reqId, message: String((e as Error)?.message ?? e) })
-      }
+serveVoice({
+  async load(_msg, progress) {
+    const tts = await TtsSession.create({
+      voiceId: PIPER_VOICE,
+      wasmPaths: WASM_PATHS,
+      progress: (p) => progress({ file: p.url, loaded: p.loaded, total: p.total, status: 'progress' }),
+    })
+    return {
+      info: { device: 'wasm', dtype: 'piper', isolated: self.crossOriginIsolated, threads, voice: 'piper' },
+      synth: async (text) => decodeWav(await (await tts.predict(text)).arrayBuffer()),
     }
-  } finally {
-    busy = false
-  }
-}
-
-self.onmessage = async (ev: MessageEvent<WorkerIn>) => {
-  const msg = ev.data
-  if (msg.type === 'init') {
-    try {
-      tts = await TtsSession.create({
-        voiceId: PIPER_VOICE,
-        wasmPaths: WASM_PATHS,
-        progress: (p) => post({ type: 'progress', file: p.url, loaded: p.loaded, total: p.total, status: 'progress' }),
-      })
-      post({ type: 'testing' })
-      await speak('Hello.')
-      const t0 = performance.now()
-      const test = await speak('This is a short test of the reading voice.')
-      const testRtf = (performance.now() - t0) / 1000 / test.duration
-      post({ type: 'ready', info: { device: 'wasm', dtype: 'piper', isolated: self.crossOriginIsolated, threads, testRtf, voice: 'piper' } })
-      void pump()
-    } catch (e) {
-      post({ type: 'error', message: String((e as Error)?.message ?? e) })
-    }
-  } else if (msg.type === 'generate') {
-    queue.push(msg)
-    void pump()
-  } else if (msg.type === 'cancel') {
-    minEpoch = Math.max(minEpoch, msg.epoch)
-    for (let i = queue.length - 1; i >= 0; i--) {
-      if (queue[i].epoch < minEpoch) {
-        post({ type: 'cancelled', reqId: queue[i].reqId })
-        queue.splice(i, 1)
-      }
-    }
-  }
-}
+  },
+})

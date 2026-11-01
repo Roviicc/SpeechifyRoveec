@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { importFile, playerInfo, sentenceHighlight, shot, spokenText, wordHighlight } from './helpers'
+import { importFile, playerInfo, sentenceHighlight, setTheme, shot, spokenText, wordHighlight } from './helpers'
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/?tts=fake')
@@ -83,6 +83,98 @@ test('EPUB: read, TOC jump, auto-scroll pill, themes, text settings', async ({ p
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'sepia')
   expect(await sentenceHighlight(page)).not.toBe('')
   await shot(page, info, 'reader-sepia')
+})
+
+/** Viewport centre of the first occurrence of `word` inside the block whose text contains `blockText`. */
+function wordPoint(page: import('@playwright/test').Page, blockText: string, word: string) {
+  return page.evaluate(
+    ([blockText, word]) => {
+      const el = [...document.querySelectorAll<HTMLElement>('[data-b]')].find((e) => e.textContent!.includes(blockText))!
+      el.scrollIntoView({ block: 'center' })
+      const at = el.textContent!.indexOf(word)
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+      let pos = 0
+      for (let n = walker.nextNode() as Text | null; n; n = walker.nextNode() as Text | null) {
+        if (at < pos + n.length) {
+          const r = document.createRange()
+          r.setStart(n, at - pos)
+          r.setEnd(n, Math.min(n.length, at - pos + word.length))
+          const rect = r.getBoundingClientRect()
+          return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+        }
+        pos += n.length
+      }
+      throw new Error('word not found')
+    },
+    [blockText, word],
+  )
+}
+
+test('EPUB: images, inline formatting and structure; taps and highlights stay exact', async ({ page }, info) => {
+  await importFile(page, 'alice.epub')
+  const text = page.getByTestId('reader-text')
+  await expect(text).toContainText('So she was considering')
+  // italics are rendered as spans, the block text is unchanged
+  const para = page.locator('[data-b]', { hasText: 'So she was considering' })
+  await expect(para.locator('.m-i')).toHaveText(['sleepy', 'stupid'])
+
+  // the inline EPUB image loads from the stored file (object URL) and is scaled to the column
+  const img = page.locator('figure.blk-img img').first()
+  await page.locator('figure.blk-img').first().scrollIntoViewIfNeeded()
+  await expect(img).toHaveAttribute('src', /^blob:/)
+  await expect.poll(() => img.evaluate((i: HTMLImageElement) => i.complete && i.naturalWidth)).toBe(600)
+  const box = (await img.boundingBox())!
+  const col = (await text.boundingBox())!
+  expect(box.width).toBeLessThanOrEqual(col.width)
+  expect(box.width / box.height).toBeCloseTo(1.5, 1)
+  await expect(page.locator('.blk-cap')).toHaveText('The White Rabbit, late as usual.')
+  await shot(page, info, 'epub-image-light')
+
+  // tap a word after the italics -> that sentence, word-accurate
+  const p1 = await wordPoint(page, 'So she was considering', 'daisy-chain')
+  await page.mouse.click(p1.x, p1.y)
+  await expect.poll(() => sentenceHighlight(page)).toMatch(/^So she was considering.*close by her\.$/)
+  await expect.poll(() => wordHighlight(page), { timeout: 3000 }).not.toBe('')
+  // tap inside the italic word itself
+  await page.getByTestId('play-pause').click()
+  await page.getByTestId('next-sentence').click()
+  await expect.poll(() => sentenceHighlight(page)).not.toMatch(/^So she was/)
+  const p2 = await wordPoint(page, 'So she was considering', 'sleepy')
+  await page.mouse.click(p2.x, p2.y)
+  await expect.poll(() => sentenceHighlight(page)).toMatch(/^So she was considering/)
+  // the sentence highlight spans the italic text nodes exactly
+  expect(await sentenceHighlight(page)).toBe(await para.textContent())
+
+  // chapter III: blockquote, list markers, poem line breaks, table rows
+  await page.getByTestId('play-pause').click()
+  await page.getByTestId('toc-button').click()
+  await page.getByRole('button', { name: /Chapter III/ }).click()
+  await expect(page.locator('.blk-quote')).toContainText('Ahem!')
+  await expect(page.locator('.blk-li').first()).toHaveAttribute('data-li', '1.')
+  await expect(page.locator('.blk-row')).toHaveCount(3)
+  const poem = page.locator('.blk-lines').first()
+  await expect(poem).toHaveCSS('white-space', 'pre-line')
+  expect((await poem.boundingBox())!.height).toBeGreaterThan(80) // four lines
+  await page.locator('.blk-quote').scrollIntoViewIfNeeded()
+  await shot(page, info, 'epub-structure-light')
+  // tap a poem line
+  const p3 = await wordPoint(page, 'Fury said to a mouse', 'prosecute')
+  await page.mouse.click(p3.x, p3.y)
+  await expect.poll(() => sentenceHighlight(page)).toContain('prosecute you')
+  await page.getByTestId('play-pause').click()
+  await shot(page, info, 'epub-poem-table-light')
+
+  await setTheme(page, 'dark')
+  await page.reload()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  await page.getByRole('button', { name: 'Start from the beginning' }).click()
+  await page.locator('.blk-quote').scrollIntoViewIfNeeded()
+  await shot(page, info, 'epub-structure-dark')
+  await page.locator('.blk-row').last().scrollIntoViewIfNeeded()
+  await shot(page, info, 'epub-poem-table-dark')
+  await page.locator('figure.blk-img').first().scrollIntoViewIfNeeded()
+  await expect(page.locator('figure.blk-img img').first()).toHaveAttribute('src', /^blob:/)
+  await shot(page, info, 'epub-image-dark')
 })
 
 test('resume after reload offers to continue', async ({ page }) => {

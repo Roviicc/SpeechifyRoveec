@@ -56,7 +56,8 @@ test('bookmarks, highlights with notes, search in book', async ({ page }, info) 
 
   // select some text -> highlight toolbar
   await page.evaluate(() => {
-    const p = [...document.querySelectorAll('[data-b]')].find((e) => e.textContent?.startsWith('There was nothing so very remarkable'))!
+    const p = [...document.querySelectorAll('[data-b]')].find((e) => e.textContent?.startsWith('There was nothing so very remarkable'))! as HTMLElement
+    p.scrollIntoView({ block: 'center' })
     const r = document.createRange()
     r.setStart(p.firstChild!, 0)
     r.setEnd(p.firstChild!, 35)
@@ -88,7 +89,7 @@ test('bookmarks, highlights with notes, search in book', async ({ page }, info) 
   await expect(page.getByTestId('search-result')).toHaveCount(1)
   await shot(page, info, 'search-sheet')
   await page.getByTestId('search-result').click()
-  await expect.poll(() => sentenceHighlight(page)).toContain('ORANGE MARMALADE')
+  await expect.poll(() => sentenceHighlight(page)).toContain('Orange Marmalade')
 
   // reload: notes persist
   await page.reload()

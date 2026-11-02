@@ -20,6 +20,19 @@ public class LaunchTest {
         Robolectric.buildActivity(LauncherActivity.class, new Intent(Intent.ACTION_MAIN)).setup();
     }
 
+    /** The TWA library enables these components at launch; a missing one crashes on real devices. */
+    @Test
+    public void requiredLibraryComponentsAreDeclared() throws Exception {
+        android.content.pm.PackageManager pm = org.robolectric.RuntimeEnvironment.getApplication().getPackageManager();
+        String pkg = org.robolectric.RuntimeEnvironment.getApplication().getPackageName();
+        for (String cls : new String[] {
+                "com.google.androidbrowserhelper.trusted.LauncherActivity",
+                "com.google.androidbrowserhelper.trusted.ManageDataLauncherActivity",
+                "app.lumen.reader.DictionaryActivity" }) {
+            pm.getActivityInfo(new android.content.ComponentName(pkg, cls), 0); // throws NameNotFoundException if missing
+        }
+    }
+
     @Test
     public void dictionaryChooserStarts() {
         Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse("lumen://choose"));

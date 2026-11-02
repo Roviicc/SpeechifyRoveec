@@ -46,6 +46,10 @@ export interface IndexOptions {
 function blockSkipped(b: Block, skip: SkipOptions): boolean {
   if ((b.skip === 'header' || b.skip === 'footer') && skip.headersFooters) return true
   if (skip.pageNumbers && (b.skip === 'pagenum' || isPageNumberLine(b.text))) return true
+  // older stored settings lack these keys: missing means on (the default)
+  if (b.skip === 'footnote' && skip.footnoteText !== false) return true
+  if (b.skip === 'caption' && skip.captions !== false) return true
+  if (b.skip === 'table' && skip.tables !== false) return true
   return false
 }
 

@@ -34,7 +34,7 @@ describe('buildBookIndex', () => {
   })
 
   it('reads everything when smart skip is off', () => {
-    const off = { headersFooters: false, pageNumbers: false, citations: false, footnotes: false, urls: false }
+    const off = { headersFooters: false, pageNumbers: false, citations: false, footnotes: false, urls: false, footnoteText: false, captions: false, tables: false }
     const idx = buildBookIndex(doc, { skip: off, dictionary: [{ word: 'third', say: '3rd' }] })
     expect(idx.sentences.map((s) => s.spoken.text)).toEqual([
       'Running Header',

@@ -19,6 +19,12 @@ export interface SkipOptions {
   citations: boolean
   footnotes: boolean
   urls: boolean
+  /** PDF footnote text (small print at the bottom of a page) */
+  footnoteText: boolean
+  /** short figure/table captions ("Figure 3. …") */
+  captions: boolean
+  /** runs of table rows (numbers, short cells) */
+  tables: boolean
 }
 
 export const DEFAULT_SKIP: SkipOptions = {
@@ -27,6 +33,9 @@ export const DEFAULT_SKIP: SkipOptions = {
   citations: true,
   footnotes: true,
   urls: true,
+  footnoteText: true,
+  captions: true,
+  tables: true,
 }
 
 export interface PronunciationEntry {

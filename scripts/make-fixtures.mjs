@@ -1,10 +1,13 @@
 // Generates test fixtures: a small EPUB, a text PDF with headers/footers/page numbers/citations,
-// and an image-only ("scanned") PDF. Run: npm run fixtures
+// an image-only ("scanned") PDF and a two-column article PDF. Run: npm run fixtures
+// (or `node scripts/make-fixtures.mjs columns.pdf` to write only the named fixtures)
 import { chromium } from 'playwright'
 import JSZip from 'jszip'
 import { writeFile, mkdir } from 'node:fs/promises'
 
 const OUT = new URL('../tests/fixtures/', import.meta.url)
+const only = process.argv.slice(2)
+const want = (name) => !only.length || only.includes(name)
 await mkdir(OUT, { recursive: true })
 
 const browser = await chromium.launch()
@@ -94,7 +97,7 @@ zip.file('OEBPS/content.opf', `<?xml version="1.0" encoding="utf-8"?>
 <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="uid">lumen-fixture-alice</dc:identifier><dc:title>Alice’s Adventures in Wonderland</dc:title><dc:creator>Lewis Carroll</dc:creator><dc:language>en</dc:language><meta name="cover" content="cover"/></metadata>
 <manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/><item id="cover" href="cover.png" media-type="image/png" properties="cover-image"/><item id="img-rabbit" href="images/rabbit.png" media-type="image/png"/><item id="img-pool" href="images/pool.png" media-type="image/png"/>${chapters.map((_, i) => `<item id="ch${i + 1}" href="text/ch${i + 1}.xhtml" media-type="application/xhtml+xml"/>`).join('')}</manifest>
 <spine>${chapters.map((_, i) => `<itemref idref="ch${i + 1}"/>`).join('')}</spine></package>`)
-await writeFile(new URL('alice.epub', OUT), await zip.generateAsync({ type: 'nodebuffer', mimeType: 'application/epub+zip' }))
+if (want('alice.epub')) await writeFile(new URL('alice.epub', OUT), await zip.generateAsync({ type: 'nodebuffer', mimeType: 'application/epub+zip' }))
 
 // ---------- text PDF with running header/footer, page numbers, citations ----------
 const para = (n) =>
@@ -106,7 +109,7 @@ const para = (n) =>
   ].join(' ')
 const sectionsHtml = [1, 2, 3, 4].map((s) => `<h1>Section ${s}: ${['How sound moves', 'Temperature', 'Humidity', 'Rooms and echoes'][s - 1]}</h1>` + [1, 2, 3].map((k) => `<p>${para(s * 10 + k)}</p>`).join('')).join('')
 await page.setContent(`<html><head><style>body{font-family:Georgia,serif;font-size:13pt;line-height:1.5;margin:0} h1{font-size:20pt;margin:0.8em 0 0.4em} p{margin:0 0 0.8em;text-align:left}</style></head><body>${sectionsHtml}</body></html>`)
-await page.pdf({
+if (want('sound.pdf')) await page.pdf({
   path: new URL('sound.pdf', OUT).pathname,
   format: 'A5',
   margin: { top: '60px', bottom: '60px', left: '50px', right: '50px' },
@@ -122,7 +125,40 @@ await page.setViewportSize({ width: 600, height: 300 })
 await page.setContent('<body style="margin:0;font:28px Georgia;padding:30px">This page is only a picture of text.</body>')
 const shot = await page.screenshot({ type: 'png' })
 await page.setContent(`<body style="margin:0"><img src="data:image/png;base64,${shot.toString('base64')}" style="width:100%"></body>`)
-await page.pdf({ path: new URL('scanned.pdf', OUT).pathname, format: 'A5' })
+if (want('scanned.pdf')) await page.pdf({ path: new URL('scanned.pdf', OUT).pathname, format: 'A5' })
+
+// ---------- two-column article: full-width title and abstract, two columns, caption, table, footnote ----------
+const colParas = [
+  'Paragraph one opens the left column. Reading software has to follow the columns of a page, not the rows, or the sentences turn into nonsense when they are read aloud from left to right across the gutter.',
+  'Paragraph two continues the left column. Academic papers, newsletters and magazines often set their text in two columns because short lines are easier to read on a large page.',
+  'Paragraph three is still in the left column. A careful reader moves down one column to its end and then starts again at the top of the next column, and so should a voice.',
+  'Paragraph four begins the right column. When the order is right, the listener hears each paragraph in sequence and the argument of the article stays easy to follow.',
+  'Paragraph five sits in the right column. Small print at the bottom of the page, captions under figures and tables of numbers are best skipped while listening.',
+  'Paragraph six ends the right column. That is the end of the article, and the voice should stop here instead of reading the footnote below.',
+]
+await page.setContent(`<html><head><style>
+body{font-family:Georgia,serif;font-size:11pt;line-height:1.45;margin:0}
+h1{font-size:20pt;margin:0 0 0.3em;text-align:center}
+.abstract{margin:0 0 1em}
+.cols{column-count:2;column-gap:28px;column-fill:balance}
+p{margin:0 0 0.7em;text-align:justify}
+.cap{font-size:11pt;margin:0 0 0.7em}
+table{border-collapse:collapse;margin:0 0 0.7em} td{padding:0 14px 0 0}
+.fn{font-size:8pt;margin-top:2em;border-top:1px solid #999;padding-top:4px}
+</style></head><body>
+<h1>Reading Columns Aloud</h1>
+<p class="abstract">Abstract. This short article is set in two columns below a title and an abstract that span the whole width of the page, so the reader can check the reading order.</p>
+<div class="cols">
+<p>${colParas[0]}</p><p>${colParas[1]}</p>
+<div class="cap">Figure 1. Columns on a page.</div>
+<p>${colParas[2]}</p>
+<p>${colParas[3]}</p>
+<table><tr><td>2019</td><td>1,204</td><td>3.2%</td></tr><tr><td>2020</td><td>1,388</td><td>15.3%</td></tr><tr><td>2021</td><td>1,512</td><td>8.9%</td></tr></table>
+<p>${colParas[4]}</p><p>${colParas[5]}</p>
+</div>
+<div class="fn">1 This footnote explains a detail of the article and is printed in small type at the foot of the page.</div>
+</body></html>`)
+if (want('columns.pdf')) await page.pdf({ path: new URL('columns.pdf', OUT).pathname, format: 'A4', margin: { top: '60px', bottom: '60px', left: '60px', right: '60px' } })
 
 await browser.close()
 console.log('fixtures written to tests/fixtures/')

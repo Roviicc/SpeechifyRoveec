@@ -1,5 +1,7 @@
-import type { Block, PdfSpan } from '@/engine/book/types'
+import type { Block, BlockSkip, PdfSpan } from '@/engine/book/types'
 import { isPageNumberLine, normalizeRepeatLine } from '@/engine/text/smartSkip'
+import { orderColumns } from './columns'
+import { isCaptionText, markFootnotes, markTables } from './junk'
 
 /** Minimal shape of a pdf.js TextItem. */
 export interface PdfTextItem {
@@ -18,7 +20,12 @@ export interface PdfLine {
   width: number
   /** [itemIndex, lineOffset, itemOffset, length] */
   spans: PdfSpan[]
-  role?: 'header' | 'footer' | 'pagenum'
+  /** horizontal extent [x0, x1] of the text item behind each span (parallel to `spans`) */
+  boxes?: Array<[number, number]>
+  role?: BlockSkip
+  /** set for lines inside a detected text column: the column's left edge and width */
+  colX?: number
+  colW?: number
 }
 
 /** Group a page's text items into visual lines (keeps content-stream order). */
@@ -32,9 +39,10 @@ export function groupLines(items: PdfTextItem[]): PdfLine[] {
       const trimmed = t.trimEnd()
       if (trimmed.length !== t.length) {
         cur.text = trimmed
-        cur.spans = cur.spans
-          .map(([i, lo, io, len]) => [i, lo, io, Math.min(len, trimmed.length - lo)] as PdfSpan)
-          .filter((s) => s[3] > 0)
+        const boxes = cur.boxes!
+        const keep = cur.spans.map(([i, lo, io, len]) => [i, lo, io, Math.min(len, trimmed.length - lo)] as PdfSpan)
+        cur.spans = keep.filter((s) => s[3] > 0)
+        cur.boxes = boxes.filter((_, k) => keep[k][3] > 0)
       }
       if (/\S/.test(cur.text)) lines.push(cur)
     }
@@ -47,7 +55,7 @@ export function groupLines(items: PdfTextItem[]): PdfLine[] {
     if (cur && Math.abs(y - cur.y) > 0.45 * Math.max(h, cur.h)) close()
     if (it.str) {
       if (!cur) {
-        cur = { text: '', x, y, h, width: 0, spans: [] }
+        cur = { text: '', x, y, h, width: 0, spans: [], boxes: [] }
         lastEnd = x
       } else {
         const gap = x - lastEnd
@@ -62,6 +70,7 @@ export function groupLines(items: PdfTextItem[]): PdfLine[] {
       }
       if (str.length) {
         cur.spans.push([i, cur.text.length, io, str.length])
+        cur.boxes!.push([x, x + Math.max(0, it.width)])
         cur.text += str
       }
       cur.h = Math.max(cur.h, h)
@@ -117,6 +126,25 @@ function quantile(xs: number[], q: number): number {
   return s[Math.min(s.length - 1, Math.floor(s.length * q))]
 }
 
+/** Role lines that stay one block per line (footnote lines are joined into paragraphs instead). */
+const LINE_ROLES = new Set<BlockSkip>(['header', 'footer', 'pagenum', 'table'])
+
+/**
+ * Full page pipeline after `groupLines`: running headers/footers and page numbers, column order,
+ * footnotes and tables, then paragraphs. Mutates `pages` (roles, column order).
+ */
+export function pagesToBlocks(pages: PdfLine[][]): Block[][] {
+  markRepeatedLines(pages)
+  for (let p = 0; p < pages.length; p++) pages[p] = orderColumns(pages[p])
+  const allBody = pages.flat().filter((l) => !l.role).map((l) => l.h).sort((a, b) => a - b)
+  const bodyHeight = allBody[allBody.length >> 1]
+  return pages.map((lines, i) => {
+    markFootnotes(lines, bodyHeight)
+    markTables(lines)
+    return linesToBlocks(lines, i, bodyHeight)
+  })
+}
+
 /** Assemble lines into paragraphs/headings, de-hyphenating wrapped words. */
 export function linesToBlocks(lines: PdfLine[], page: number, bodyHeight?: number): Block[] {
   const body = lines.filter((l) => !l.role)
@@ -128,34 +156,53 @@ export function linesToBlocks(lines: PdfLine[], page: number, bodyHeight?: numbe
   }
   // typical line spacing: a low quantile so paragraph gaps don't inflate it
   const lineGap = quantile(gaps, 0.3) || hMed * 1.2
-  const minX = Math.min(...body.map((l) => l.x))
-  const maxW = Math.max(...body.map((l) => l.width))
+  const pageMinX = Math.min(...body.map((l) => l.x))
+  const pageMaxW = Math.max(...body.map((l) => l.width))
+  // inside a detected column, indentation and line width are measured against the column
+  const minXOf = (l: PdfLine) => l.colX ?? pageMinX
+  const maxWOf = (l: PdfLine) => l.colW ?? pageMaxW
 
   const blocks: Block[] = []
-  let cur: { text: string; spans: PdfSpan[]; kind: Block['kind']; h: number } | null = null
+  let cur: { text: string; spans: PdfSpan[]; kind: Block['kind']; h: number; skip?: BlockSkip } | null = null
   const flush = () => {
-    if (cur && /\S/.test(cur.text)) blocks.push({ text: cur.text, kind: cur.kind, page, spans: cur.spans })
+    if (cur && /\S/.test(cur.text)) {
+      const b: Block = { text: cur.text, kind: cur.kind, page, spans: cur.spans }
+      if (cur.skip) b.skip = cur.skip
+      else if (isCaptionText(cur.text)) b.skip = 'caption'
+      blocks.push(b)
+    }
     cur = null
   }
   let prev: PdfLine | null = null
   for (const l of lines) {
-    if (l.role) {
+    if (l.role && LINE_ROLES.has(l.role)) {
       flush()
       blocks.push({ text: l.text, kind: 'p', page, spans: l.spans, skip: l.role })
       continue
     }
-    const isHeading = hMed > 0 && l.h > hMed * 1.25 && l.text.length < 200
+    // footnote lines are joined into paragraphs like body text, but never mixed with it
+    const isHeading = !l.role && hMed > 0 && l.h > hMed * 1.25 && l.text.length < 200
     const kind: Block['kind'] = isHeading ? 'h' : 'p'
-    let newPara = !cur || cur.kind !== kind
+    let newPara = !cur || cur.kind !== kind || cur.skip !== l.role
     if (!newPara && prev) {
       const gap = prev.y - l.y
-      if (gap > lineGap * 1.45 || gap < -hMed) newPara = true
-      else if (kind === 'p' && l.x > minX + hMed * 0.9 && prev.x <= minX + hMed * 0.5) newPara = true
-      else if (kind === 'p' && prev.width < maxW * 0.7 && /[.!?:"”’)]$/.test(prev.text)) newPara = true
+      if (gap < -hMed) {
+        // jumped up. In a column layout a sentence may run on from the bottom of one column to the top of the next.
+        const runsOn =
+          kind === 'p' &&
+          l.colX !== undefined &&
+          l.x > prev.x &&
+          prev.width >= maxWOf(prev) * 0.7 &&
+          !/[.!?:"”’)]$/.test(prev.text) &&
+          /^\p{Ll}/u.test(l.text)
+        if (!runsOn) newPara = true
+      } else if (gap > lineGap * 1.45) newPara = true
+      else if (kind === 'p' && l.x > minXOf(l) + hMed * 0.9 && prev.x <= minXOf(prev) + hMed * 0.5) newPara = true
+      else if (kind === 'p' && prev.width < maxWOf(prev) * 0.7 && /[.!?:"”’)]$/.test(prev.text)) newPara = true
     }
     if (newPara) {
       flush()
-      cur = { text: '', spans: [], kind, h: l.h }
+      cur = { text: '', spans: [], kind, h: l.h, skip: l.role }
     }
     const c = cur!
     let offset = c.text.length

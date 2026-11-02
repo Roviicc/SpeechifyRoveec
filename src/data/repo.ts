@@ -1,7 +1,8 @@
 import { db, type BookRow, type BookmarkRow, type HighlightRow, type Locator, type ProgressRow } from './db'
 import { uid } from './util'
 import type { BookDoc } from '@/engine/book/types'
-import { DOC_VERSION } from '@/engine/book/types'
+import { docVersion } from '@/engine/book/types'
+import { remapLocator, remapRange } from '@/engine/book/remap'
 
 type Listener = () => void
 const listeners = new Set<Listener>()
@@ -28,14 +29,41 @@ export async function saveImportedBook(row: BookRow, file: Blob, doc: BookDoc) {
     const existing = await db.books.get(row.id)
     await db.books.put(existing ? { ...existing, ...row, addedAt: existing.addedAt } : row)
     await db.files.put({ bookId: row.id, blob: file })
-    await db.content.put({ bookId: row.id, version: DOC_VERSION, doc })
+    await db.content.put({ bookId: row.id, version: docVersion(doc.type), doc })
   })
   notifyChange()
 }
 
 export async function getContent(bookId: string): Promise<BookDoc | null> {
   const row = await db.content.get(bookId)
-  return row && row.version === DOC_VERSION ? row.doc : null
+  return row && row.version === docVersion(row.doc.type) ? row.doc : null
+}
+
+/** The stored parse even when it is out of date (to map saved positions onto a re-parse). */
+export async function getStaleContent(bookId: string): Promise<BookDoc | null> {
+  return (await db.content.get(bookId))?.doc ?? null
+}
+
+/**
+ * After a re-parse, move the saved position, bookmarks and highlights onto the new block numbering
+ * (same page, found again by the surrounding text). updatedAt moves by 1 ms only: the mapped record
+ * wins over its own synced copy but never over a real change made on another device.
+ */
+export async function remapPositions(bookId: string, oldDoc: BookDoc, newDoc: BookDoc) {
+  await db.transaction('rw', [db.progress, db.bookmarks, db.highlights], async () => {
+    const p = await db.progress.get(bookId)
+    if (p) await db.progress.put({ ...p, locator: remapLocator(oldDoc, newDoc, p.locator), updatedAt: p.updatedAt + 1 })
+    for (const b of await db.bookmarks.where('bookId').equals(bookId).toArray()) {
+      if (b.deleted) continue
+      await db.bookmarks.put({ ...b, locator: remapLocator(oldDoc, newDoc, b.locator), updatedAt: b.updatedAt + 1 })
+    }
+    for (const h of await db.highlights.where('bookId').equals(bookId).toArray()) {
+      if (h.deleted) continue
+      const r = remapRange(oldDoc, newDoc, h.start, h.end, h.text)
+      await db.highlights.put({ ...h, start: r.start, end: r.end, updatedAt: h.updatedAt + 1 })
+    }
+  })
+  notifyChange()
 }
 
 export async function getFile(bookId: string) {

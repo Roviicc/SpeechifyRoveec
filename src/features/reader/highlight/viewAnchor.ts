@@ -49,19 +49,20 @@ export function readAnchor(container: HTMLElement, surface: TextSurface, index: 
       return { ...p, dy: pr.rect.top - box.top, kind: pr.precise ? 'text' : 'block' }
     }
   }
-  const y = line
-  // between paragraphs, or a PDF page that isn't rendered yet: use the element under the line
-  const el = document.elementFromPoint(box.left + box.width / 2, y)
-  const blockEl = el?.closest<HTMLElement>('[data-b]')
-  if (blockEl && container.contains(blockEl)) {
-    const block = Number(blockEl.dataset.b)
-    return { block, offset: 0, dy: blockEl.getBoundingClientRect().top - box.top, kind: 'block' }
-  }
-  const pageEl = el?.closest<HTMLElement>('[data-page]')
-  if (pageEl && container.contains(pageEl)) {
-    const page = Number(pageEl.dataset.page)
-    const block = index.blocks.find((b) => b.page === page && !b.skippedAll)
-    if (block) return { block: block.index, offset: 0, dy: pageEl.getBoundingClientRect().top - box.top, kind: 'page', page }
+  // between paragraphs, on a picture, or a PDF page that isn't rendered yet: use the element under the line
+  for (let step = 0; step < 6; step++) {
+    const el = document.elementFromPoint(box.left + box.width / 2, line + step * 12)
+    const blockEl = el?.closest<HTMLElement>('[data-b]')
+    if (blockEl && container.contains(blockEl)) {
+      const block = Number(blockEl.dataset.b)
+      return { block, offset: 0, dy: blockEl.getBoundingClientRect().top - box.top, kind: 'block' }
+    }
+    const pageEl = el?.closest<HTMLElement>('[data-page]')
+    if (pageEl && container.contains(pageEl)) {
+      const page = Number(pageEl.dataset.page)
+      const block = index.blocks.find((b) => b.page === page && !b.skippedAll)
+      if (block) return { block: block.index, offset: 0, dy: pageEl.getBoundingClientRect().top - box.top, kind: 'page', page }
+    }
   }
   return null
 }
@@ -91,4 +92,20 @@ export function restoreAnchor(container: HTMLElement, surface: TextSurface, a: V
   // this view, or text still rendering) put the start of that text on the reading line
   place(pr.rect.top, pr.precise && a.kind === 'text' ? a.dy : box.height * READING_LINE)
   return pr.precise
+}
+
+/** Is the anchored thing away from its old height (or not laid out yet)? */
+export function anchorMisplaced(container: HTMLElement, surface: TextSurface, a: ViewAnchor): boolean {
+  const box = container.getBoundingClientRect()
+  const top =
+    a.kind === 'page' && a.page !== undefined
+      ? (container.querySelector(`[data-page="${a.page}"]`)?.getBoundingClientRect().top ?? null)
+      : a.kind === 'block'
+        ? (container.querySelector(`[data-b="${a.block}"]`)?.getBoundingClientRect().top ?? null)
+        : (pointRect(surface, a)?.rect.top ?? null)
+  if (top === null) return true
+  const off = top - box.top - a.dy
+  if (off < 0 && container.scrollTop <= 0) return false
+  if (off > 0 && container.scrollTop >= container.scrollHeight - container.clientHeight - 1) return false
+  return Math.abs(off) > 3
 }

@@ -8,7 +8,22 @@ import { Highlighter } from './highlighter'
 import { AutoScroller } from './autoScroll'
 import { readerSelection } from './useReaderSelection'
 import { caretFromPoint, type TextPoint, type TextSurface } from './surface'
-import { READING_LINE, readAnchor, restoreAnchor, type ViewAnchor } from './viewAnchor'
+import { anchorMisplaced, READING_LINE, readAnchor, restoreAnchor, type ViewAnchor } from './viewAnchor'
+import { pinWhileSettling } from './pin'
+
+/** Is sentence i away from the reading line (or not laid out yet)? */
+function sentenceMisplaced(container: HTMLElement, surface: TextSurface, index: BookIndex, i: number): boolean {
+  const sent = index.sentences[i]
+  if (!sent) return false
+  const box = container.getBoundingClientRect()
+  const r = surface.rangesFor(sent.block, sent.start, sent.end).map((x) => x.getBoundingClientRect()).find((x) => x.height > 0)
+  if (!r) return true
+  const off = r.top - box.top - box.height * READING_LINE
+  // at the very top or bottom the page can't scroll further: as close as possible is right
+  if (off < 0 && container.scrollTop <= 0) return false
+  if (off > 0 && container.scrollTop >= container.scrollHeight - container.clientHeight - 1) return false
+  return Math.abs(off) > 3
+}
 
 /**
  * Connects the playback session to a rendered surface: sentence/word highlight (rAF loop),
@@ -29,6 +44,8 @@ export function useReaderSync(container: HTMLElement | null, surface: TextSurfac
 
   /** What is on the reading line right now; survives layout changes (mode switch, text settings). */
   const anchor = useRef<ViewAnchor | null>(null)
+  /** Block on the reading line, as React state for "where am I" displays (changes only when the block changes). */
+  const [viewBlock, setViewBlock] = useState<number | null>(null)
   /** While the layout is being swapped, scroll events describe a half-built page: don't track them. */
   const frozen = useRef(false)
   /** A restore that still waits for content (e.g. the PDF page isn't rendered yet). */
@@ -58,7 +75,10 @@ export function useReaderSync(container: HTMLElement | null, surface: TextSurfac
         raf = 0
         if (frozen.current) return
         const a = readAnchor(container, surface, index)
-        if (a) anchor.current = a
+        if (a) {
+          anchor.current = a
+          setViewBlock(a.block)
+        }
         if (!userMoved || !a) return
         clearTimeout(saveTimer)
         saveTimer = setTimeout(() => {
@@ -84,14 +104,27 @@ export function useReaderSync(container: HTMLElement | null, surface: TextSurfac
     }
   }, [container, surface, index])
 
-  // text settings changed: the text reflows, put the same words back on the same line
+  // text settings changed: the text reflows, put the same words back on the same line (and keep them there while
+  // the new layout settles — the restyle can land a frame after this effect)
   const firstLayout = useRef(true)
+  const stopReflowPin = useRef<() => void>(() => {})
   useLayoutEffect(() => {
     if (firstLayout.current) {
       firstLayout.current = false
       return
     }
-    if (container && surface && anchor.current) restoreAnchor(container, surface, anchor.current)
+    const a = anchor.current
+    if (!container || !surface || !a) return
+    stopReflowPin.current()
+    const at = Date.now()
+    frozen.current = true
+    stopReflowPin.current = pinWhileSettling(
+      container,
+      () => void restoreAnchor(container, surface, a),
+      () => anchorMisplaced(container, surface, a),
+      () => lastUserScroll.current > at,
+      unfreeze,
+    )
   }, [fontSize, fontFamily, lineHeight, margin, container, surface])
 
   useEffect(() => {
@@ -132,57 +165,36 @@ export function useReaderSync(container: HTMLElement | null, surface: TextSurfac
     // Is the target where it should be? (the sentence on the reading line, or the anchor at its old height)
     const misplaced = (): boolean => {
       if (!container) return false
-      const box = container.getBoundingClientRect()
       if (a && !following) {
         if (a.kind !== 'text') return false
+        const box = container.getBoundingClientRect()
         const r = surface.rangesFor(a.block, a.offset, a.offset + 1)[0]?.getBoundingClientRect()
         return !r || Math.abs(r.top - box.top - a.dy) > 3
       }
-      const sent = index.sentences[i]
-      if (!sent) return false
-      const r = surface.rangesFor(sent.block, sent.start, sent.end).map((x) => x.getBoundingClientRect()).find((x) => x.height > 0)
-      return !r || Math.abs(r.top - box.top - box.height * READING_LINE) > 3
+      return sentenceMisplaced(container, surface, index, i)
     }
-    let raf = 0
-    requestAnimationFrame(() => {
+    let stop = () => {}
+    const raf = requestAnimationFrame(() => {
       // the reader already scrolled while the view was being prepared: leave the page where they put it
-      if (lastUserScroll.current > placedAt) {
+      if (!container || lastUserScroll.current > placedAt || (!a && container.scrollTop > 0)) {
         unfreeze()
         return
       }
-      place()
-      let placedTop = container?.scrollTop ?? 0
-      // Long chapters keep settling for a moment after opening (content-visibility lays out off-screen sections
-      // lazily). Check every frame for a short while and nudge the place back, until it holds still — and never
-      // once the reader has moved the page.
-      let good = 0
-      let frames = 0
-      let unfrozen = false
-      const settle = () => {
-        raf = 0
-        // anything else moved the page (the reader, Contents/Search/Notes, a link): stop correcting at once.
-        // Layout settling moves the content, not scrollTop, so a changed scrollTop always means someone scrolled.
-        const movedByOthers = container ? Math.abs(container.scrollTop - placedTop) > 1 : false
-        if (movedByOthers || lastUserScroll.current > placedAt || pendingRestore.current) {
-          // the reader took over (or a PDF page is still rendering): stop correcting, keep tracking
-          if (!unfrozen && !pendingRestore.current) unfreeze()
-          return
-        }
-        if (misplaced()) {
-          good = 0
-          place()
-          placedTop = container?.scrollTop ?? 0
-        } else good++
-        if (!unfrozen && good >= 1) {
-          unfrozen = true
-          unfreeze()
-        }
-        if (good < 4 && ++frames < 90) raf = requestAnimationFrame(settle)
-        else if (!unfrozen) unfreeze()
-      }
-      raf = requestAnimationFrame(settle)
+      stop = pinWhileSettling(
+        container,
+        place,
+        misplaced,
+        // the reader took over, or a jump moved the voice elsewhere (that target wins)
+        () => lastUserScroll.current > placedAt || session().player.index !== i || !!pendingRestore.current,
+        () => {
+          if (!pendingRestore.current) unfreeze()
+        },
+      )
     })
-    return () => cancelAnimationFrame(raf)
+    return () => {
+      cancelAnimationFrame(raf)
+      stop()
+    }
   }, [highlighter, surface, index, container])
 
   useEffect(() => () => highlighter.clear(), [highlighter])
@@ -209,6 +221,7 @@ export function useReaderSync(container: HTMLElement | null, surface: TextSurfac
       if (!raf) raf = requestAnimationFrame(tick)
     }
     let prev = player.index
+    let stopJump = () => {}
     const offSentence = player.on('sentence', (i) => {
       highlighter.setSentence(i)
       // Only the voice reading on to the next sentence respects "the reader scrolled away".
@@ -217,7 +230,16 @@ export function useReaderSync(container: HTMLElement | null, surface: TextSurfac
       prev = i
       if (!readingOn) {
         scroller.current!.resume()
-        scroller.current!.scrollTo(container, surface, index, i, { force: true })
+        stopJump()
+        if (!container) return
+        const at = Date.now()
+        // land at once, then stay on target while the chapter lays out (a smooth scroll aims at a moving target)
+        stopJump = pinWhileSettling(
+          container,
+          () => scroller.current!.scrollTo(container, surface, index, i, { force: true, smooth: false }),
+          () => sentenceMisplaced(container, surface, index, i),
+          () => lastUserScroll.current > at || player.index !== i,
+        )
       } else {
         scroller.current!.scrollTo(container, surface, index, i)
       }
@@ -227,6 +249,7 @@ export function useReaderSync(container: HTMLElement | null, surface: TextSurfac
     })
     if (player.state === 'playing') start()
     return () => {
+      stopJump()
       offSentence()
       offState()
       if (raf) cancelAnimationFrame(raf)
@@ -299,5 +322,5 @@ export function useReaderSync(container: HTMLElement | null, surface: TextSurfac
     [surface, index, playFrom],
   )
 
-  return { highlighter, jumpVisible, jumpToCurrent, playFromView, onTap, onSurfaceUpdated, playFrom, scroller: scroller.current! }
+  return { highlighter, viewBlock, jumpVisible, jumpToCurrent, playFromView, onTap, onSurfaceUpdated, playFrom, scroller: scroller.current! }
 }

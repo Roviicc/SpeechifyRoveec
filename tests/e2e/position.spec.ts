@@ -150,7 +150,7 @@ test('Contents jumps even after scrolling away (pill showing)', async ({ page })
   await expect(page.getByTestId('play-from-here')).toBeHidden()
   // the chapter heading is on screen, near the reading line
   await expect.poll(async () => {
-    const top = await page.getByText('Chapter III. A Caucus-Race and a Long Tale').first().evaluate((el) => {
+    const top = await page.getByTestId('reader-scroll').getByText('Chapter III. A Caucus-Race and a Long Tale').first().evaluate((el) => {
       const c = document.querySelector('[data-testid=reader-scroll]')!.getBoundingClientRect()
       return (el.getBoundingClientRect().top - c.top) / c.height
     })

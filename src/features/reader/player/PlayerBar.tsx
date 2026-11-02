@@ -1,4 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import type { BookIndex } from '@/engine/book/bookIndex'
+import type { BookDoc } from '@/engine/book/types'
+import { whereLabel } from '@/features/reader/WhereBar'
 import { ChevronsLeft, ChevronsRight, Loader2, Pause, Play, SkipBack, SkipForward } from 'lucide-react'
 import { session } from '@/session/session'
 import { usePlayback } from '@/state/playback'
@@ -6,7 +9,17 @@ import { formatMinutes, formatTime, IconButton } from '@/ui/controls'
 import { ModelProgress } from '@/features/voice/ModelProgress'
 
 /** Bottom player: seekable progress, « play », chapter skip and the speed button. */
-export function PlayerBar({ onSpeed, sectionLabel = 'chapter' }: { onSpeed: () => void; sectionLabel?: string }) {
+export function PlayerBar({
+  onSpeed,
+  sectionLabel = 'chapter',
+  doc,
+  index: book,
+}: {
+  onSpeed: () => void
+  sectionLabel?: string
+  doc?: BookDoc | null
+  index?: BookIndex | null
+}) {
   const state = usePlayback((s) => s.state)
   const speed = usePlayback((s) => s.speed)
   const index = usePlayback((s) => s.index)
@@ -19,6 +32,19 @@ export function PlayerBar({ onSpeed, sectionLabel = 'chapter' }: { onSpeed: () =
     return () => clearInterval(t)
   }, [])
 
+  // chapter starts as fractions of the book (top-level contents entries; none for page-by-page PDF lists)
+  const ticks = useMemo(() => {
+    if (!doc || !book || !book.totalChars) return []
+    const entries = doc.toc.filter((t) => t.level === 0)
+    if (entries.length < 2 || entries.length > 80) return []
+    return entries
+      .map((t) => {
+        const first = book.sectionSentenceStart[t.section]
+        return first === undefined ? -1 : book.cumChars[first] / book.totalChars
+      })
+      .filter((f) => f > 0.002 && f < 0.998)
+  }, [doc, book])
+
   const s = session()
   const est = s.estimate()
   const frac = scrub ?? (est.total ? est.elapsed / est.total : 0)
@@ -29,7 +55,14 @@ export function PlayerBar({ onSpeed, sectionLabel = 'chapter' }: { onSpeed: () =
     <div className="safe-bottom border-t border-line bg-bg" data-testid="player-bar">
       <ModelProgress />
       {error && state === 'error' && <p className="px-5 pt-2 text-sm text-red-600">Playback error: {error}</p>}
-      <div className="px-5 pt-2">
+      <div className="relative px-5 pt-2">
+        {scrub !== null && doc && book && (
+          <ScrubBubble fraction={scrub} label={(() => {
+            const i = s.sentenceAtFraction(scrub)
+            const block = book.sentences[i]?.block
+            return block === undefined ? '' : whereLabel(doc, book, block).primary
+          })()} time={formatTime(scrub * est.total)} />
+        )}
         <input
           type="range"
           className="slider thin"
@@ -49,6 +82,11 @@ export function PlayerBar({ onSpeed, sectionLabel = 'chapter' }: { onSpeed: () =
             setScrub(null)
           }}
         />
+        <div className="pointer-events-none absolute inset-x-5 top-2 h-7" aria-hidden data-testid="chapter-ticks">
+          {ticks.map((f, k) => (
+            <span key={k} className="absolute top-1/2 h-2 w-[3px] -translate-x-1/2 -translate-y-1/2 bg-bg" style={{ left: `${f * 100}%` }} />
+          ))}
+        </div>
         <div className="-mt-1 flex justify-between text-xs text-muted tabular-nums">
           <span data-testid="elapsed">{formatTime(elapsed)}</span>
           <span className="truncate px-2">{est.sectionRemaining > 0 ? `${formatMinutes(est.sectionRemaining)} left in ${sectionLabel}` : ''}</span>
@@ -88,6 +126,20 @@ export function PlayerBar({ onSpeed, sectionLabel = 'chapter' }: { onSpeed: () =
           {speed}×
         </button>
       </div>
+    </div>
+  )
+}
+
+/** Bubble above the progress bar while dragging: where you would land. */
+function ScrubBubble({ fraction, label, time }: { fraction: number; label: string; time: string }) {
+  return (
+    <div
+      className="pointer-events-none absolute bottom-full z-10 mb-1 max-w-[70%] -translate-x-1/2 rounded-xl border border-line bg-bg px-3 py-1.5 text-center shadow-[var(--shadow)]"
+      style={{ left: `clamp(25%, calc(20px + ${fraction} * (100% - 40px)), 75%)` }}
+      data-testid="scrub-bubble"
+    >
+      <div className="truncate text-xs font-semibold">{label}</div>
+      <div className="text-[11px] text-muted tabular-nums">{time}</div>
     </div>
   )
 }

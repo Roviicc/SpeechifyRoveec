@@ -11,6 +11,7 @@ import { ReflowView } from '@/features/reader/views/ReflowView'
 import { NoteEditSheet, NotesSheet, SearchSheet, SleepSheet, SpeedSheet, TextSettingsSheet, TocSheet } from '@/features/reader/sheets'
 import { SelectionToolbar, type SelectionInfo } from '@/features/reader/highlight/SelectionToolbar'
 import { TopBar } from './TopBar'
+import { WhereBar } from './WhereBar'
 import { ReaderMenu } from './ReaderMenu'
 import { ResumeBanner } from './ResumeBanner'
 import { useReaderSync } from '@/features/reader/highlight/useReaderSync'
@@ -91,6 +92,7 @@ export function ReaderScreen({ bookId }: { bookId: string }) {
         onTogglePdfMode={() => setSettings({ pdfMode: mode === 'original' ? 'text' : 'original' })}
         menu={<ReaderMenu open={panel === 'menu'} onToggle={() => setPanel(panel === 'menu' ? null : 'menu')} onClose={closePanel} onSelect={setPanel} />}
       />
+      {doc && <WhereBar doc={doc} index={index} viewBlock={sync.viewBlock} />}
 
       {/* body */}
       <div className="relative min-h-0 flex-1">
@@ -146,7 +148,7 @@ export function ReaderScreen({ bookId }: { bookId: string }) {
         )}
       </div>
 
-      <PlayerBar onSpeed={() => setPanel('speed')} sectionLabel={doc?.type === 'pdf' ? 'page' : 'chapter'} />
+      <PlayerBar onSpeed={() => setPanel('speed')} sectionLabel={doc?.type === 'pdf' ? 'page' : 'chapter'} doc={doc} index={index} />
 
       <SelectionToolbar container={container} surface={surface} index={index} onHighlight={(s, c, n) => void onHighlight(s, c, n)} onPlayFrom={(p) => sync.playFrom(p)} />
 

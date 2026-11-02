@@ -69,7 +69,30 @@ test('bookmarks, highlights with notes, search in book', async ({ page }, info) 
     return { from: at(1), to: at(30) }
   })
   if (info.project.name === 'phone') {
-    // phones: Lumen's own long-press selection (no Android menu / Touch to Search)
+    // phones in "Lumen selection" mode: own long-press selection (no Android menu / Touch to Search)
+    await page.evaluate(() => {
+      const raw = JSON.parse(localStorage.getItem('lumen-settings') || '{"state":{},"version":1}')
+      raw.state.touchSelection = 'lumen'
+      localStorage.setItem('lumen-settings', JSON.stringify(raw))
+    })
+    await page.reload()
+    await page.getByTestId('reader').waitFor()
+    const again = await page.evaluate(() => {
+      const p = [...document.querySelectorAll('[data-b]')].find((e) => e.textContent?.startsWith('There was nothing so very remarkable'))! as HTMLElement
+      p.scrollIntoView({ block: 'center' })
+      const node = p.firstChild!
+      const at = (i: number) => {
+        const r = document.createRange()
+        r.setStart(node, i)
+        r.setEnd(node, i + 1)
+        const b = r.getBoundingClientRect()
+        return { x: b.left + b.width / 2, y: b.top + b.height / 2 }
+      }
+      return { from: at(1), to: at(30) }
+    })
+    pts.from = again.from
+    pts.to = again.to
+    await page.waitForTimeout(300)
     await longPressDrag(page, pts.from, pts.to)
     expect(await page.evaluate(() => window.getSelection()?.isCollapsed ?? true)).toBe(true)
   } else {

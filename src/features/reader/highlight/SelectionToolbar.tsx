@@ -1,7 +1,7 @@
 import { BookOpenText, Copy, Play, StickyNote } from 'lucide-react'
 import type { BookIndex } from '@/engine/book/bookIndex'
 import { toast } from '@/ui/toast'
-import { useReaderSelection, type SelectionInfo } from './useReaderSelection'
+import { isTouchSelection, useReaderSelection, type SelectionInfo } from './useReaderSelection'
 
 export type { SelectionInfo } from './useReaderSelection'
 import { useSettings } from '@/state/settings'
@@ -24,10 +24,12 @@ export function SelectionToolbar({
   onHighlight: (sel: SelectionInfo, color: HighlightColor, withNote: boolean) => void
   onPlayFrom: (p: TextPoint) => void
 }) {
-  const { sel, clear } = useReaderSelection(container, surface, index)
+  const { sel, clear, native } = useReaderSelection(container, surface, index)
   const lookupApp = useSettings((s) => s.lookup)
   if (!sel) return null
-  const top = Math.max(64, sel.rect.top - 60)
+  // on phones with Android's selection, the system menu sits above the selection: put Lumen's toolbar below it
+  const below = native && isTouchSelection()
+  const top = below ? Math.min(window.innerHeight - 220, sel.rect.bottom + 44) : Math.max(64, sel.rect.top - 60)
   const left = Math.min(Math.max(8, sel.rect.left + sel.rect.width / 2 - 170), window.innerWidth - 348)
   const done = clear
   return (

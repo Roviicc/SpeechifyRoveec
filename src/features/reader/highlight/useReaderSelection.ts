@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { BookIndex } from '@/engine/book/bookIndex'
 import { splitWords } from '@/engine/text/segment'
 import { caretFromPoint, type TextPoint, type TextSurface } from './surface'
+import { useSettings } from '@/state/settings'
 
 export interface SelectionInfo {
   start: TextPoint
@@ -80,13 +81,15 @@ function describe(index: BookIndex, surface: TextSurface, a: Word, b: Word): Sel
 
 /**
  * Current text selection in the reader.
- * - Mouse/trackpad: the browser's own selection (selectionchange).
+ * - Mouse/trackpad, or phones set to "Android selection": the browser's own selection (selectionchange).
  * - Touch: long-press selects a word, keep holding and drag to extend word by word, release to show the toolbar.
  *   Native selection is turned off on the container, so Android's menu and Chrome's Touch to Search never appear.
  */
 export function useReaderSelection(container: HTMLElement | null, surface: TextSurface | null, index: BookIndex | null) {
   const [sel, setSel] = useState<SelectionInfo | null>(null)
-  const touch = useRef(isTouchSelection())
+  const mode = useSettings((s) => s.touchSelection)
+  // Lumen's own long-press selection only on touch screens, and only when chosen in Settings
+  const own = isTouchSelection() && mode === 'lumen'
 
   const clear = useCallback(() => {
     paint([])
@@ -103,9 +106,9 @@ export function useReaderSelection(container: HTMLElement | null, surface: TextS
     }
   }, [clear])
 
-  // mouse: native selection
+  // browser selection (mouse, or Android selection on phones)
   useEffect(() => {
-    if (touch.current) return
+    if (own) return
     let t: ReturnType<typeof setTimeout>
     const update = () => {
       clearTimeout(t)
@@ -127,11 +130,11 @@ export function useReaderSelection(container: HTMLElement | null, surface: TextS
       clearTimeout(t)
       document.removeEventListener('selectionchange', update)
     }
-  }, [container, surface])
+  }, [container, surface, own])
 
   // touch: own long-press selection
   useEffect(() => {
-    if (!touch.current || !container || !surface || !index) return
+    if (!own || !container || !surface || !index) return
     container.classList.add('touch-select')
     let timer: ReturnType<typeof setTimeout> | undefined
     let startX = 0
@@ -200,7 +203,7 @@ export function useReaderSelection(container: HTMLElement | null, surface: TextS
       container.removeEventListener('contextmenu', noMenu)
       container.removeEventListener('scroll', onScroll)
     }
-  }, [container, surface, index, clear])
+  }, [container, surface, index, clear, own])
 
-  return { sel, clear }
+  return { sel, clear, native: !own }
 }

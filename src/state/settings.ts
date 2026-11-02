@@ -10,6 +10,8 @@ export type Margin = 'narrow' | 'normal' | 'wide'
 export interface Settings {
   /** where "Look up" sends a selected word (device-specific, not synced) */
   lookup: LookupApp
+  /** phones: Android's own selection (handles + system menu, e.g. ColorDict popup) or Lumen's long-press selection */
+  touchSelection: 'android' | 'lumen'
   theme: Theme
   fontSize: number
   fontFamily: FontFamily
@@ -28,6 +30,7 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   lookup: 'share',
+  touchSelection: 'android',
   theme: 'system',
   fontSize: 19,
   fontFamily: 'serif',

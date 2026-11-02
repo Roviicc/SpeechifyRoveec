@@ -1,7 +1,7 @@
 import { useSettings } from '@/state/settings'
 import { useState } from 'react'
 import { BookOpenText, Check, ChevronRight } from 'lucide-react'
-import { Toggle } from '@/ui/controls'
+import { Segmented, Toggle } from '@/ui/controls'
 import { Sheet } from '@/ui/Sheet'
 import { LOOKUP_APPS, lookUp, lookupAppName } from '@/features/reader/lookup'
 import { Group } from './Group'
@@ -14,6 +14,23 @@ export function ReadingSection() {
       <Toggle label="Highlight current sentence" checked={st.highlightSentence} onChange={(v) => st.set({ highlightSentence: v })} testId="toggle-hl-sentence" />
       <Toggle label="Highlight current word" checked={st.highlightWord} onChange={(v) => st.set({ highlightWord: v })} testId="toggle-hl-word" />
       <Toggle label="Auto-scroll" description="Keep the sentence being read in view" checked={st.autoScroll} onChange={(v) => st.set({ autoScroll: v })} />
+      <div className="border-t border-line py-3">
+        <div className="mb-1.5 text-[15px]">Text selection on phones</div>
+        <Segmented<'android' | 'lumen'>
+          label="Text selection on phones"
+          value={st.touchSelection}
+          onChange={(v) => st.set({ touchSelection: v })}
+          options={[
+            { value: 'android', label: 'Android' },
+            { value: 'lumen', label: 'Lumen' },
+          ]}
+        />
+        <p className="mt-1.5 text-sm text-muted" data-testid="selection-mode-note">
+          {st.touchSelection === 'android'
+            ? 'Android’s handles and menu. Apps like ColorDict appear in that menu (under ⋮) and open as a popup over the book.'
+            : 'Long-press and drag to select words. No Android menu or Google “Touch to Search”.'}
+        </p>
+      </div>
       <button className="flex min-h-14 w-full items-center gap-3 border-t border-line py-2 text-left" onClick={() => setPicking(true)} data-testid="dictionary-app">
         <BookOpenText size={20} className="shrink-0 text-muted" />
         <span className="flex-1">

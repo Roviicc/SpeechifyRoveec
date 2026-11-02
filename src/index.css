@@ -88,6 +88,11 @@ body {
   overscroll-behavior-y: none;
 }
 
+/* no Android stretch/bounce when pulling past the top or bottom of any scrolling area */
+* {
+  overscroll-behavior: none;
+}
+
 button {
   cursor: pointer;
 }

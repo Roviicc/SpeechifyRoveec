@@ -70,7 +70,7 @@ export default defineConfig({
         name: 'Lumen — Read Aloud',
         short_name: 'Lumen',
         description: 'Listen to your EPUB and PDF books with a natural on-device voice.',
-        theme_color: '#2F54EB',
+        theme_color: '#FFFFFF',
         background_color: '#FFFFFF',
         display: 'standalone',
         orientation: 'portrait',

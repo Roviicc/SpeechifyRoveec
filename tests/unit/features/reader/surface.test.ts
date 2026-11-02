@@ -93,3 +93,11 @@ describe('look up', () => {
     expect(colorDictIntent('pedestrian')).toContain('action=colordict.intent.action.SEARCH;package=com.socialnmobile.colordict;S.EXTRA_QUERY=pedestrian;')
   })
 })
+
+describe('android app helper', () => {
+  it('builds intent URLs for the native helper', async () => {
+    const { nativeHelperUrl } = await import('@/features/reader/lookup')
+    expect(nativeHelperUrl('lookup', 'walk able')).toBe('intent://lookup?q=walk%20able#Intent;scheme=lumen;package=app.lumen.reader;end')
+    expect(nativeHelperUrl('choose')).toBe('intent://choose#Intent;scheme=lumen;package=app.lumen.reader;end')
+  })
+})

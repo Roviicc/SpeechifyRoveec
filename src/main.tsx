@@ -6,9 +6,14 @@ import { session } from '@/session/session'
 import { startSyncLoop } from '@/sync/syncService'
 import { importBook } from '@/features/library/import/importBook'
 import { navigate } from '@/app/router'
+import { inAndroidApp } from '@/features/reader/lookup'
+import { useSettings } from '@/state/settings'
 
 // create the playback session before React renders (its constructor updates stores)
 session()
+
+// Inside the Lumen Android app, "Look up" uses the native helper (installed apps, ColorDict popup) by default
+if (inAndroidApp() && useSettings.getState().lookup === 'share') useSettings.getState().set({ lookup: 'android-app' })
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.lumen.reader",
+      "sha256_cert_fingerprints": ["E5:42:01:23:C7:3D:37:B1:B5:E1:44:35:5B:6C:80:DE:A7:54:56:75:E2:86:C9:3F:F2:9F:D3:6B:66:4B:4D:40"]
+    }
+  }
+]

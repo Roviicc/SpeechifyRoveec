@@ -1,0 +1,8 @@
+<resources>
+    <!-- fully transparent, no animation: the helper only starts the dictionary and closes -->
+    <style name="Invisible" parent="@android:style/Theme.Translucent.NoTitleBar">
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:windowNoDisplay">false</item>
+        <item name="android:backgroundDimEnabled">false</item>
+    </style>
+</resources>

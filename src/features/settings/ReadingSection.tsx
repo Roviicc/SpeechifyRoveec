@@ -3,12 +3,14 @@ import { useState } from 'react'
 import { BookOpenText, Check, ChevronRight } from 'lucide-react'
 import { Segmented, Toggle } from '@/ui/controls'
 import { Sheet } from '@/ui/Sheet'
-import { LOOKUP_APPS, lookUp, lookupAppName } from '@/features/reader/lookup'
+import { ANDROID_APP_TARGET, chooseInstalledDictionary, inAndroidApp, LOOKUP_APPS, lookUp, lookupAppName } from '@/features/reader/lookup'
 import { Group } from './Group'
 
 export function ReadingSection() {
   const st = useSettings()
   const [picking, setPicking] = useState(false)
+  const inApp = inAndroidApp()
+  const options = inApp ? [ANDROID_APP_TARGET, ...LOOKUP_APPS] : LOOKUP_APPS
   return (
     <Group title="Reading">
       <Toggle label="Highlight current sentence" checked={st.highlightSentence} onChange={(v) => st.set({ highlightSentence: v })} testId="toggle-hl-sentence" />
@@ -40,9 +42,13 @@ export function ReadingSection() {
         <ChevronRight size={18} className="text-muted" />
       </button>
       <Sheet open={picking} onClose={() => setPicking(false)} title="Dictionary app" testId="dictionary-sheet">
-        <p className="mb-2 text-sm text-muted">Pick once — “Look up” then opens it directly. Websites can’t see which apps you have, so these are popular dictionaries.</p>
+        <p className="mb-2 text-sm text-muted">
+          {inApp
+            ? 'Pick once — “Look up” then opens it directly.'
+            : 'Pick once — “Look up” then opens it directly. Websites can’t see which apps you have, so these are popular dictionaries. In the Lumen Android app you can pick from your installed apps.'}
+        </p>
         <div role="radiogroup" aria-label="Dictionary app">
-          {LOOKUP_APPS.map((a) => (
+          {options.map((a) => (
             <button
               key={a.id}
               role="radio"
@@ -60,7 +66,12 @@ export function ReadingSection() {
             </button>
           ))}
         </div>
-        <button className="mt-4 h-12 w-full rounded-full bg-primary font-semibold text-on-primary" onClick={() => void lookUp('serendipity', st.lookup)} data-testid="dictionary-try">
+        {inApp && st.lookup === 'android-app' && (
+          <button className="mt-4 h-12 w-full rounded-full bg-surface font-semibold" onClick={chooseInstalledDictionary} data-testid="dictionary-choose-installed">
+            Choose from my apps…
+          </button>
+        )}
+        <button className="mt-3 h-12 w-full rounded-full bg-primary font-semibold text-on-primary" onClick={() => void lookUp('serendipity', st.lookup)} data-testid="dictionary-try">
           Try it with “serendipity”
         </button>
       </Sheet>

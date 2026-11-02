@@ -1,12 +1,43 @@
 import { toast } from '@/ui/toast'
 
 /** Where "Look up" sends a word. Websites can't list installed apps, so these are known dictionary apps. */
-export type LookupApp = 'share' | 'colordict' | 'translate' | 'merriam' | 'dictionarycom' | 'wiktionary' | 'google'
+export type LookupApp = 'android-app' | 'share' | 'colordict' | 'translate' | 'merriam' | 'dictionarycom' | 'wiktionary' | 'google'
 
 export interface LookupTarget {
   id: LookupApp
   name: string
   note: string
+}
+
+/** Android package of the Lumen app (APK). Inside it, a native helper opens dictionaries as a popup. */
+export const ANDROID_PACKAGE = 'app.lumen.reader'
+const IN_APP_KEY = 'lumen-in-android-app'
+
+/** True when Lumen runs inside the Lumen Android app (Trusted Web Activity). Remembered after the first launch. */
+export function inAndroidApp(): boolean {
+  try {
+    if (document.referrer.startsWith(`android-app://${ANDROID_PACKAGE}`)) localStorage.setItem(IN_APP_KEY, '1')
+    return localStorage.getItem(IN_APP_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+/** Ask the app's native helper (lumen://…) — only works inside the Lumen Android app. */
+export function nativeHelperUrl(action: 'lookup' | 'choose', query = ''): string {
+  const q = action === 'lookup' ? `?q=${encodeURIComponent(query)}` : ''
+  return `intent://${action}${q}#Intent;scheme=lumen;package=${ANDROID_PACKAGE};end`
+}
+
+/** Pick the dictionary from the apps installed on the phone (native list, Lumen Android app only). */
+export function chooseInstalledDictionary() {
+  location.href = nativeHelperUrl('choose')
+}
+
+export const ANDROID_APP_TARGET: LookupTarget = {
+  id: 'android-app',
+  name: 'Apps on this phone (popup)',
+  note: 'Pick from your installed dictionaries — ColorDict opens as a popup over the book',
 }
 
 export const LOOKUP_APPS: LookupTarget[] = [
@@ -19,7 +50,7 @@ export const LOOKUP_APPS: LookupTarget[] = [
   { id: 'share', name: 'Ask every time', note: 'Android’s app picker — any app that accepts text' },
 ]
 
-export const lookupAppName = (id: LookupApp) => LOOKUP_APPS.find((a) => a.id === id)?.name ?? 'Ask every time'
+export const lookupAppName = (id: LookupApp) => (id === 'android-app' ? ANDROID_APP_TARGET.name : (LOOKUP_APPS.find((a) => a.id === id)?.name ?? 'Ask every time'))
 
 /** Text to send: a word or short phrase, without surrounding punctuation. */
 export function cleanQuery(text: string): string {
@@ -69,7 +100,11 @@ function openColorDict(query: string) {
 export async function lookUp(text: string, app: LookupApp) {
   const query = cleanQuery(text)
   if (!query) return
-  if (app === 'colordict') return openColorDict(query)
+  if (app === 'android-app') {
+    location.href = nativeHelperUrl('lookup', query)
+    return
+  }
+  if (app === 'colordict') return inAndroidApp() ? void (location.href = nativeHelperUrl('lookup', query)) : openColorDict(query)
   const url = lookupUrl(app, query)
   if (url) {
     // a new navigation lets Android hand the link to the installed app

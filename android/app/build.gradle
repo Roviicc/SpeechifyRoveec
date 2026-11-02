@@ -1,0 +1,53 @@
+plugins {
+    id 'com.android.application'
+}
+
+// The web app this APK opens (Trusted Web Activity). Override with -PlumenUrl=https://...
+def lumenUrl = project.findProperty('lumenUrl') ?: 'https://speechify-roveec.vercel.app'
+def lumenHost = new URI(lumenUrl).host
+
+android {
+    namespace 'app.lumen.reader'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'app.lumen.reader'
+        minSdk 24
+        targetSdk 35
+        versionCode 1
+        versionName '1.0'
+        manifestPlaceholders = [hostName: lumenHost, launchUrl: lumenUrl + '/']
+        resValue 'string', 'launchUrl', lumenUrl + '/'
+        resValue 'string', 'assetStatements',
+            '[{ "relation": ["delegate_permission/common.handle_all_urls"], "target": { "namespace": "web", "site": "' + lumenUrl + '" } }]'
+    }
+
+    signingConfigs {
+        release {
+            // keystore is not committed; see android/README.md
+            def ks = file(System.getenv('LUMEN_KEYSTORE') ?: '../lumen-release.keystore')
+            if (ks.exists()) {
+                storeFile ks
+                storePassword System.getenv('LUMEN_KEYSTORE_PASSWORD') ?: 'lumen-local'
+                keyAlias 'lumen'
+                keyPassword System.getenv('LUMEN_KEYSTORE_PASSWORD') ?: 'lumen-local'
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.7.4'
+}

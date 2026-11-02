@@ -53,3 +53,17 @@ export async function setTheme(page: Page, theme: 'light' | 'dark' | 'sepia') {
     localStorage.setItem('lumen-settings', JSON.stringify(raw))
   }, theme)
 }
+
+/** Real touch long-press + drag (Chrome DevTools protocol), as a finger would do on a phone. */
+export async function longPressDrag(page: Page, from: { x: number; y: number }, to: { x: number; y: number }) {
+  const cdp = await page.context().newCDPSession(page)
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: from.x, y: from.y }] })
+  await page.waitForTimeout(650)
+  for (let i = 1; i <= 6; i++) {
+    const x = from.x + ((to.x - from.x) * i) / 6
+    const y = from.y + ((to.y - from.y) * i) / 6
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y }] })
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  await cdp.detach()
+}

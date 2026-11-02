@@ -6,6 +6,7 @@ import { session } from '@/session/session'
 import { useSettings } from '@/state/settings'
 import { Highlighter } from './highlighter'
 import { AutoScroller } from './autoScroll'
+import { readerSelection } from './useReaderSelection'
 import { caretFromPoint, type TextPoint, type TextSurface } from './surface'
 
 /**
@@ -116,6 +117,9 @@ export function useReaderSync(container: HTMLElement | null, surface: TextSurfac
   const onTap = useCallback(
     (e: React.MouseEvent) => {
       if (!surface || !index) return
+      // a tap ends a long-press selection instead of jumping
+      if (Date.now() < readerSelection.suppressTapUntil) return
+      if (readerSelection.active) return readerSelection.clear()
       const sel = window.getSelection()
       if (sel && !sel.isCollapsed) return
       if ((e.target as HTMLElement).closest('button, a, input')) return

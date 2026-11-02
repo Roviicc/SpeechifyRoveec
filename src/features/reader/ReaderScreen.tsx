@@ -142,7 +142,7 @@ export function ReaderScreen({ bookId }: { bookId: string }) {
 
       <PlayerBar onSpeed={() => setPanel('speed')} sectionLabel={doc?.type === 'pdf' ? 'page' : 'chapter'} />
 
-      <SelectionToolbar container={container} surface={surface} onHighlight={(s, c, n) => void onHighlight(s, c, n)} onPlayFrom={(p) => sync.playFrom(p)} />
+      <SelectionToolbar container={container} surface={surface} index={index} onHighlight={(s, c, n) => void onHighlight(s, c, n)} onPlayFrom={(p) => sync.playFrom(p)} />
 
       <SpeedSheet open={panel === 'speed'} onClose={closePanel} />
       <TextSettingsSheet open={panel === 'text'} onClose={closePanel} />

@@ -277,6 +277,20 @@ button {
 ::highlight(skipped) {
   color: var(--skipped);
 }
+::highlight(reader-sel) {
+  background-color: rgb(47 84 235 / 0.3);
+}
+/* touch screens: Lumen handles long-press selection itself (no Android text menu / Touch to Search) */
+.touch-select,
+.touch-select * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.touch-select .textLayer :is(span, br) {
+  -webkit-user-select: none;
+  user-select: none;
+}
 ::highlight(search-hit) {
   background-color: rgb(250 204 21 / 0.55);
 }

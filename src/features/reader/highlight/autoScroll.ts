@@ -1,3 +1,4 @@
+import { readerSelection } from './useReaderSelection'
 import type { BookIndex } from '@/engine/book/bookIndex'
 import type { TextSurface } from './surface'
 
@@ -16,6 +17,8 @@ export class AutoScroller {
     this.cleanup = null
     if (!container) return
     const pause = () => {
+      // dragging to select text (touch long-press) is not scrolling away
+      if (readerSelection.active) return
       if (!this.paused) {
         this.paused = true
         this.onPausedChange(true)

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { importFile, playerInfo, sentenceHighlight, setTheme, shot } from './helpers'
+import { importFile, longPressDrag, playerInfo, sentenceHighlight, setTheme, shot } from './helpers'
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/?tts=fake')
@@ -55,16 +55,34 @@ test('bookmarks, highlights with notes, search in book', async ({ page }, info) 
   await expect(page.getByTestId('bookmark-button')).toHaveAttribute('aria-pressed', 'true')
 
   // select some text -> highlight toolbar
-  await page.evaluate(() => {
+  const pts = await page.evaluate(() => {
     const p = [...document.querySelectorAll('[data-b]')].find((e) => e.textContent?.startsWith('There was nothing so very remarkable'))! as HTMLElement
     p.scrollIntoView({ block: 'center' })
-    const r = document.createRange()
-    r.setStart(p.firstChild!, 0)
-    r.setEnd(p.firstChild!, 35)
-    const sel = window.getSelection()!
-    sel.removeAllRanges()
-    sel.addRange(r)
+    const node = p.firstChild!
+    const at = (i: number) => {
+      const r = document.createRange()
+      r.setStart(node, i)
+      r.setEnd(node, i + 1)
+      const b = r.getBoundingClientRect()
+      return { x: b.left + b.width / 2, y: b.top + b.height / 2 }
+    }
+    return { from: at(1), to: at(30) }
   })
+  if (info.project.name === 'phone') {
+    // phones: Lumen's own long-press selection (no Android menu / Touch to Search)
+    await longPressDrag(page, pts.from, pts.to)
+    expect(await page.evaluate(() => window.getSelection()?.isCollapsed ?? true)).toBe(true)
+  } else {
+    await page.evaluate(() => {
+      const p = [...document.querySelectorAll('[data-b]')].find((e) => e.textContent?.startsWith('There was nothing so very remarkable'))! as HTMLElement
+      const r = document.createRange()
+      r.setStart(p.firstChild!, 0)
+      r.setEnd(p.firstChild!, 35)
+      const sel = window.getSelection()!
+      sel.removeAllRanges()
+      sel.addRange(r)
+    })
+  }
   await expect(page.getByTestId('selection-toolbar')).toBeVisible()
   await expect(page.getByTestId('lookup')).toBeVisible()
   await shot(page, info, 'selection-toolbar')

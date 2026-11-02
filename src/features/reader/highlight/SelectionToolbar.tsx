@@ -1,62 +1,35 @@
-import { useEffect, useState } from 'react'
-import { BookOpenText, Play, StickyNote } from 'lucide-react'
+import { BookOpenText, Copy, Play, StickyNote } from 'lucide-react'
+import type { BookIndex } from '@/engine/book/bookIndex'
+import { toast } from '@/ui/toast'
+import { useReaderSelection, type SelectionInfo } from './useReaderSelection'
+
+export type { SelectionInfo } from './useReaderSelection'
 import { useSettings } from '@/state/settings'
 import { lookUp } from '@/features/reader/lookup'
 import type { TextPoint, TextSurface } from './surface'
 import { HIGHLIGHT_COLORS } from '@/features/reader/sheets/constants'
 import type { HighlightColor } from '@/data/db'
 
-export interface SelectionInfo {
-  start: TextPoint
-  end: TextPoint
-  text: string
-  rect: DOMRect
-}
-
-/** Floating toolbar shown over a text selection: 4 highlight colours, note, look up, play from here. */
+/** Floating toolbar shown over a text selection: 4 highlight colours, note, copy, look up, play from here. */
 export function SelectionToolbar({
   container,
   surface,
+  index,
   onHighlight,
   onPlayFrom,
 }: {
   container: HTMLElement | null
   surface: TextSurface | null
+  index: BookIndex | null
   onHighlight: (sel: SelectionInfo, color: HighlightColor, withNote: boolean) => void
   onPlayFrom: (p: TextPoint) => void
 }) {
-  const [sel, setSel] = useState<SelectionInfo | null>(null)
+  const { sel, clear } = useReaderSelection(container, surface, index)
   const lookupApp = useSettings((s) => s.lookup)
-  useEffect(() => {
-    let t: ReturnType<typeof setTimeout>
-    const update = () => {
-      clearTimeout(t)
-      t = setTimeout(() => {
-        const s = window.getSelection()
-        if (!s || s.isCollapsed || !s.rangeCount || !container || !surface) return setSel(null)
-        const r = s.getRangeAt(0)
-        if (!container.contains(r.commonAncestorContainer)) return setSel(null)
-        const a = surface.locate(r.startContainer, r.startOffset)
-        const b = surface.locate(r.endContainer, r.endOffset)
-        const text = r.toString().replace(/\s+/g, ' ').trim()
-        if (!a || !b || !text) return setSel(null)
-        const [start, end] = a.block < b.block || (a.block === b.block && a.offset <= b.offset) ? [a, b] : [b, a]
-        setSel({ start, end, text, rect: r.getBoundingClientRect() })
-      }, 120)
-    }
-    document.addEventListener('selectionchange', update)
-    return () => {
-      clearTimeout(t)
-      document.removeEventListener('selectionchange', update)
-    }
-  }, [container, surface])
   if (!sel) return null
   const top = Math.max(64, sel.rect.top - 60)
-  const left = Math.min(Math.max(8, sel.rect.left + sel.rect.width / 2 - 150), window.innerWidth - 308)
-  const done = () => {
-    window.getSelection()?.removeAllRanges()
-    setSel(null)
-  }
+  const left = Math.min(Math.max(8, sel.rect.left + sel.rect.width / 2 - 170), window.innerWidth - 348)
+  const done = clear
   return (
     <div
       className="anim-fade fixed z-40 flex h-12 items-center gap-1 rounded-full bg-fg px-2 text-bg shadow-[var(--shadow)]"
@@ -89,10 +62,24 @@ export function SelectionToolbar({
         <StickyNote size={20} />
       </button>
       <button
+        aria-label="Copy"
+        data-testid="copy"
+        className="grid h-10 w-10 place-items-center rounded-full"
+        onClick={() => {
+          void navigator.clipboard?.writeText(sel.text).then(() => toast('Copied'))
+          done()
+        }}
+      >
+        <Copy size={19} />
+      </button>
+      <button
         aria-label="Look up"
         data-testid="lookup"
         className="grid h-10 w-10 place-items-center rounded-full"
-        onClick={() => void lookUp(sel.text, lookupApp)}
+        onClick={() => {
+          void lookUp(sel.text, lookupApp)
+          done()
+        }}
       >
         <BookOpenText size={20} />
       </button>

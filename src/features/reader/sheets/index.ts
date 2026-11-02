@@ -1,6 +1,6 @@
 export { HIGHLIGHT_COLORS, SPEED_PRESETS } from './constants'
 export { SpeedSheet } from './SpeedSheet'
-export { TextSettingsSheet } from './TextSettingsSheet'
+export { PdfPageToggles, TextSettingsSheet } from './TextSettingsSheet'
 export { ThemePicker } from './ThemePicker'
 export { TocSheet } from './TocSheet'
 export { SleepSheet } from './SleepSheet'

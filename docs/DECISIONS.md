@@ -88,3 +88,16 @@ page is moved by anything else (scrollTop changed) or by the reader. The browser
 the reader (`overflow-anchor: none`) because it moved the page behind the settle loop's back. Caret hits are only
 accepted when the text is really on the line (`caretPositionFromPoint` snaps across paragraph gaps). "Play from here"
 reads the line at tap time.
+
+**2026-11-02 — Better PDFs, UI half (Step 3).** *Double tap* (Original mode) zooms in: to fit the tapped paragraph
+(column) to the screen width when that is at least 1.15x, else to 2x centred on the tap; double tap while zoomed returns
+to fit-width with the tapped spot kept under the finger. A single tap still jumps, but in Original mode the jump waits
+out a 250 ms double-tap window (`hooks/useTapOrDoubleTap.ts`); what the tap points at is read at tap time
+(`useReaderSync.tapPoint`), only `playFrom` is delayed. EPUB / Text mode taps stay immediate. *Snap to pages* (off by
+default) is done in JS, not CSS `scroll-snap`: only after the reader's own scroll (wheel / touch / keys, on `scrollend`)
+and only when a page top is within 30% of the screen; CSS snap would also snap auto-scroll's and anchor-restore's
+programmatic `scrollTo`, pulling the voice's sentence off the reading line. *Dark pages* (default on, only has an effect
+in the dark theme) applies `filter: invert(0.88) hue-rotate(180deg)` to the canvases only; the text layer with the
+CSS highlights sits above, unfiltered. *Text-mode page markers* ("— page N —") are `aria-hidden` divs between blocks
+whose label is CSS generated content (`::before { content: attr(data-label) }`): no DOM text, so nothing is read,
+selected, hit by `caretPositionFromPoint`, or mixed into the `[data-b]` offset mapping and the position anchor.

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Sheet } from '@/ui/Sheet'
-import { Segmented, Slider } from '@/ui/controls'
+import { Segmented, Slider, Toggle } from '@/ui/controls'
 import { useSettings, type FontFamily, type Margin } from '@/state/settings'
 import { ThemePicker } from './ThemePicker'
 
@@ -13,7 +13,30 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
-export function TextSettingsSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+/** "PDF pages" switches, shared by the Aa sheet (PDF Original) and Settings. */
+export function PdfPageToggles() {
+  const st = useSettings()
+  return (
+    <>
+      <Toggle
+        label="Dark pages"
+        description="Light text on dark pages when the theme is dark"
+        checked={st.darkPages}
+        onChange={(v) => st.set({ darkPages: v })}
+        testId="toggle-dark-pages"
+      />
+      <Toggle
+        label="Snap to pages"
+        description="After scrolling, line up the nearest page with the top"
+        checked={st.snapPages}
+        onChange={(v) => st.set({ snapPages: v })}
+        testId="toggle-snap-pages"
+      />
+    </>
+  )
+}
+
+export function TextSettingsSheet({ open, onClose, pdfOriginal = false }: { open: boolean; onClose: () => void; pdfOriginal?: boolean }) {
   const st = useSettings()
   return (
     <Sheet open={open} onClose={onClose} title="Text" testId="text-sheet">
@@ -64,6 +87,11 @@ export function TextSettingsSheet({ open, onClose }: { open: boolean; onClose: (
       <Row label="Theme">
         <ThemePicker value={st.theme} onChange={(theme) => st.set({ theme })} />
       </Row>
+      {pdfOriginal && (
+        <div className="mt-1 border-t border-line pt-2" data-testid="pdf-page-settings">
+          <PdfPageToggles />
+        </div>
+      )}
     </Sheet>
   )
 }

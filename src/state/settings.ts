@@ -24,6 +24,10 @@ export interface Settings {
   skip: SkipOptions
   dictionary: PronunciationEntry[]
   pdfMode: 'original' | 'text'
+  /** PDF Original: after scrolling by hand, settle with a page's top at the top of the screen */
+  snapPages: boolean
+  /** PDF Original: invert the rendered pages while the app theme is dark */
+  darkPages: boolean
   /** ms timestamp of the last change to any synced field */
   updatedAt: number
 }
@@ -43,6 +47,8 @@ export const DEFAULT_SETTINGS: Settings = {
   skip: DEFAULT_SKIP,
   dictionary: [],
   pdfMode: 'original',
+  snapPages: false,
+  darkPages: true,
   updatedAt: 0,
 }
 

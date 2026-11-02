@@ -4,10 +4,19 @@ import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { getPdfjs } from '@/engine/book/pdf/pdfjs'
 import type { BookIndex } from '@/engine/book/bookIndex'
 import { PdfSurface } from '@/features/reader/highlight/surface'
+import { useSettings } from '@/state/settings'
 
 const MIN_ZOOM = 0.5
 const MAX_ZOOM = 3
 const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round(z * 100) / 100))
+/** Zoom level a double tap goes to when the tapped paragraph can't be measured. */
+const DOUBLE_TAP_ZOOM = 2
+
+/** What the reader screen can ask of the page view. */
+export interface PdfApi {
+  /** Double tap at a screen point: zoom in on it, or back to fit-width if zoomed in. */
+  doubleTap(x: number, y: number): void
+}
 
 interface Rendered {
   scale: number
@@ -21,12 +30,14 @@ export function PdfView({
   scrollEl,
   onSurface,
   onUpdated,
+  apiRef,
 }: {
   file: Blob
   index: BookIndex
   scrollEl: HTMLElement | null
   onSurface: (s: PdfSurface) => void
   onUpdated: () => void
+  apiRef?: { current: PdfApi | null }
 }) {
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null)
   const [sizes, setSizes] = useState<Array<{ w: number; h: number }>>([])
@@ -39,6 +50,10 @@ export function PdfView({
   const onUpdatedRef = useRef(onUpdated)
   onUpdatedRef.current = onUpdated
   const pendingScroll = useRef<{ left: number; top: number } | null>(null)
+  /** zoom commits move the page: page snapping leaves the scroll that follows alone */
+  const noSnapUntil = useRef(0)
+  const snapPages = useSettings((s) => s.snapPages)
+  const darkPages = useSettings((s) => s.darkPages)
 
   useEffect(() => onSurface(surface), [surface, onSurface])
 
@@ -155,18 +170,126 @@ export function PdfView({
     }
   }, [zoom, scrollEl])
 
-  const zoomTo = (z: number, cx?: number, cy?: number) => {
+  /**
+   * Zoom keeping the screen point (cx, cy) where it is. `toLeft`: instead put that content point at this distance
+   * from the container's left edge (double tap centres the tapped spot or lines up the paragraph).
+   */
+  const zoomTo = (z: number, cx?: number, cy?: number, toLeft?: number) => {
     if (!scrollEl) return
     const next = clampZoom(z)
     const box = scrollEl.getBoundingClientRect()
     const x = cx !== undefined ? cx - box.left : scrollEl.clientWidth / 2
     const y = cy !== undefined ? cy - box.top : scrollEl.clientHeight / 2
     const r = next / zoom
-    pendingScroll.current = { left: (scrollEl.scrollLeft + x) * r - x, top: (scrollEl.scrollTop + y) * r - y }
+    pendingScroll.current = { left: (scrollEl.scrollLeft + x) * r - (toLeft ?? x), top: (scrollEl.scrollTop + y) * r - y }
+    noSnapUntil.current = Date.now() + 600
     setZoom(next)
   }
   const zoomRef = useRef(zoomTo)
   zoomRef.current = zoomTo
+
+  /** Left and right screen edges of the paragraph at (x, y) on the tapped page, if its text layer is there. */
+  const paragraphAt = (x: number, y: number): { left: number; right: number } | null => {
+    const pageEl = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-page]')
+    if (!pageEl) return null
+    const page = Number(pageEl.dataset.page)
+    const divs = surface.pages.get(page)
+    if (!divs) return null
+    let best: { left: number; right: number; d: number } | null = null
+    for (const b of index.blocks) {
+      if (b.page !== page || b.skippedAll || !b.spans) continue
+      const rs = b.spans.map(([item]) => divs[item]?.getBoundingClientRect()).filter((r): r is DOMRect => !!r && r.width > 0)
+      if (!rs.length) continue
+      const top = Math.min(...rs.map((r) => r.top))
+      const bottom = Math.max(...rs.map((r) => r.bottom))
+      const d = y < top ? top - y : y > bottom ? y - bottom : 0
+      if (!best || d < best.d) best = { left: Math.min(...rs.map((r) => r.left)), right: Math.max(...rs.map((r) => r.right)), d }
+    }
+    return best && best.d < 40 ? best : null
+  }
+
+  const doubleTap = (x: number, y: number) => {
+    if (!scrollEl) return
+    // zoomed in: back to fit-width, the tapped spot stays under the finger
+    if (zoom > 1.05) return zoomTo(1, x, y)
+    const avail = scrollEl.clientWidth - 24
+    const para = paragraphAt(x, y)
+    const fitPara = para ? Math.min(MAX_ZOOM, (zoom * avail) / (para.right - para.left)) : 0
+    if (para && fitPara >= 1.15) {
+      // the paragraph (column) fills the width: reading needs no sideways panning
+      const w = (para.right - para.left) * (fitPara / zoom)
+      return zoomTo(fitPara, para.left, y, 12 + (avail - w) / 2)
+    }
+    // otherwise 2x, the tapped spot in the middle
+    zoomTo(DOUBLE_TAP_ZOOM, x, y, scrollEl.clientWidth / 2)
+  }
+  const doubleTapRef = useRef(doubleTap)
+  doubleTapRef.current = doubleTap
+  useEffect(() => {
+    if (!apiRef) return
+    apiRef.current = { doubleTap: (x, y) => doubleTapRef.current(x, y) }
+    return () => {
+      apiRef.current = null
+    }
+  }, [apiRef])
+
+  // "Snap to pages": after the reader scrolls by hand (never after auto-scroll, a jump or a zoom), settle with the
+  // nearest page's top at the top of the screen when one is close. JS rather than CSS scroll-snap, which would
+  // also snap the programmatic scrolls that keep the voice's sentence on the reading line.
+  useEffect(() => {
+    if (!scrollEl || !snapPages) return
+    let byHand = false
+    let touching = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const hand = () => {
+      byHand = true
+    }
+    const down = () => {
+      touching = true
+      byHand = true
+    }
+    const up = () => {
+      touching = false
+    }
+    const settle = () => {
+      clearTimeout(timer)
+      if (!byHand || touching) return
+      byHand = false
+      if (Date.now() < noSnapUntil.current) return
+      const box = scrollEl.getBoundingClientRect()
+      let best: number | null = null
+      for (const el of scrollEl.querySelectorAll<HTMLElement>('[data-page]')) {
+        const d = el.getBoundingClientRect().top - box.top
+        if (best === null || Math.abs(d) < Math.abs(best)) best = d
+      }
+      if (best === null || Math.abs(best) < 2 || Math.abs(best) > scrollEl.clientHeight * 0.3) return
+      const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches
+      scrollEl.scrollTo({ top: scrollEl.scrollTop + best, behavior: reduce ? 'auto' : 'smooth' })
+    }
+    // `scrollend` where the browser has it; otherwise a pause in scroll events
+    const hasScrollEnd = 'onscrollend' in window
+    const onScroll = () => {
+      clearTimeout(timer)
+      timer = setTimeout(settle, 180)
+    }
+    scrollEl.addEventListener('wheel', hand, { passive: true })
+    scrollEl.addEventListener('keydown', hand)
+    scrollEl.addEventListener('touchstart', down, { passive: true })
+    scrollEl.addEventListener('touchend', up, { passive: true })
+    scrollEl.addEventListener('touchcancel', up, { passive: true })
+    if (hasScrollEnd) scrollEl.addEventListener('scrollend', settle)
+    else scrollEl.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      clearTimeout(timer)
+      scrollEl.removeEventListener('wheel', hand)
+      scrollEl.removeEventListener('keydown', hand)
+      scrollEl.removeEventListener('touchstart', down)
+      scrollEl.removeEventListener('touchend', up)
+      scrollEl.removeEventListener('touchcancel', up)
+      scrollEl.removeEventListener('scrollend', settle)
+      scrollEl.removeEventListener('scroll', onScroll)
+    }
+  }, [scrollEl, snapPages])
 
   // pinch-zoom (touch) and ctrl+wheel (trackpad) — CSS transform during the gesture, re-render at the end
   useEffect(() => {
@@ -229,7 +352,7 @@ export function PdfView({
   if (error) return <p className="p-8 text-center text-red-600">Couldn’t open this PDF: {error}</p>
   return (
     <>
-      <div ref={innerRef} className="py-3 pb-48" style={{ touchAction: 'pan-x pan-y', width: Math.max(width, sizes[0] ? sizes[0].w * scale + 16 : 0) }} data-testid="pdf-pages">
+      <div ref={innerRef} className={`py-3 pb-48 ${darkPages ? 'dark-pages' : ''}`} data-snap={snapPages || undefined}style={{ touchAction: 'pan-x pan-y', width: Math.max(width, sizes[0] ? sizes[0].w * scale + 16 : 0) }} data-testid="pdf-pages">
         {!pdf && <p className="p-8 text-center text-muted">Loading pages…</p>}
         {sizes.map((s, i) => (
           <div

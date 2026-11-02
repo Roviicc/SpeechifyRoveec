@@ -4,6 +4,7 @@ import { BookOpenText, Check, ChevronRight } from 'lucide-react'
 import { Segmented, Toggle } from '@/ui/controls'
 import { Sheet } from '@/ui/Sheet'
 import { ANDROID_APP_TARGET, chooseInstalledDictionary, inAndroidApp, LOOKUP_APPS, lookUp, lookupAppName } from '@/features/reader/lookup'
+import { PdfPageToggles } from '@/features/reader/sheets'
 import { Group } from './Group'
 
 export function ReadingSection() {
@@ -16,6 +17,10 @@ export function ReadingSection() {
       <Toggle label="Highlight current sentence" checked={st.highlightSentence} onChange={(v) => st.set({ highlightSentence: v })} testId="toggle-hl-sentence" />
       <Toggle label="Highlight current word" checked={st.highlightWord} onChange={(v) => st.set({ highlightWord: v })} testId="toggle-hl-word" />
       <Toggle label="Auto-scroll" description="Keep the sentence being read in view" checked={st.autoScroll} onChange={(v) => st.set({ autoScroll: v })} />
+      <div className="border-t border-line pt-1">
+        <div className="pt-2 text-sm font-medium text-muted">PDF pages</div>
+        <PdfPageToggles />
+      </div>
       <div className="border-t border-line py-3">
         <div className="mb-1.5 text-[15px]">Text selection on phones</div>
         <Segmented<'android' | 'lumen'>

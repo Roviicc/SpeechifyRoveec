@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { ListTree, Locate, Maximize, Minimize, Play } from 'lucide-react'
 import { session } from '@/session/session'
 import { navigate } from '@/app/router'
@@ -23,6 +23,8 @@ import { useSearchHit } from '@/features/reader/hooks/useSearchHit'
 import { useFullscreen } from '@/features/reader/hooks/useFullscreen'
 import type { Panel } from './panels'
 import type { TextSurface } from '@/features/reader/highlight/surface'
+import type { PdfApi } from '@/features/reader/views/PdfView'
+import { useTapOrDoubleTap } from '@/features/reader/hooks/useTapOrDoubleTap'
 
 // the PDF page viewer is only needed for PDFs in Original mode
 const PdfView = lazy(() => import('@/features/reader/views/PdfView').then((m) => ({ default: m.PdfView })))
@@ -46,6 +48,15 @@ export function ReaderScreen({ bookId }: { bookId: string }) {
   const sync = useReaderSync(container, surface, index)
   const { highlighter } = sync
   const searchHit = useSearchHit(highlighter)
+  const pdfApi = useRef<PdfApi | null>(null)
+  // PDF Original: double tap zooms, so a single tap's jump waits out the double-tap window
+  const onBodyClick = useTapOrDoubleTap({
+    enabled: mode === 'original',
+    tap: sync.onTap,
+    tapPoint: sync.tapPoint,
+    jump: (p) => sync.playFrom(p, true),
+    doubleTap: (x, y) => pdfApi.current?.doubleTap(x, y),
+  })
 
   useEffect(() => {
     setSurface(null)
@@ -102,12 +113,12 @@ export function ReaderScreen({ bookId }: { bookId: string }) {
       <div className="relative min-h-0 flex-1">
         {/* overflow-anchor: none — Lumen keeps the reading place itself (viewAnchor); the browser's own scroll
             anchoring would move the page behind its back while chapters settle */}
-        <div ref={setContainer} className="h-full overflow-auto [overflow-anchor:none]" data-testid="reader-scroll" tabIndex={-1} onClick={sync.onTap}>
+        <div ref={setContainer} className="h-full overflow-auto [overflow-anchor:none]" data-testid="reader-scroll" tabIndex={-1} onClick={onBodyClick}>
           {!doc || !index ? (
             <p className="p-8 text-center text-muted">Opening…</p>
           ) : mode === 'original' && file ? (
             <Suspense fallback={<p className="p-8 text-center text-muted">Loading pages…</p>}>
-              <PdfView file={file} index={index} scrollEl={container} onSurface={setSurface} onUpdated={sync.onSurfaceUpdated} />
+              <PdfView file={file} index={index} scrollEl={container} onSurface={setSurface} onUpdated={sync.onSurfaceUpdated} apiRef={pdfApi} />
             </Suspense>
           ) : (
             <ReflowView index={index} titles={doc.sections.map((s) => s.title)} onSurface={setSurface} imagesFrom={doc.type === 'epub' ? bookId : undefined} />
@@ -169,7 +180,7 @@ export function ReaderScreen({ bookId }: { bookId: string }) {
       <SelectionToolbar container={container} surface={surface} index={index} onHighlight={(s, c, n) => void onHighlight(s, c, n)} onPlayFrom={(p) => sync.playFrom(p)} />
 
       <SpeedSheet open={panel === 'speed'} onClose={closePanel} />
-      <TextSettingsSheet open={panel === 'text'} onClose={closePanel} />
+      <TextSettingsSheet open={panel === 'text'} onClose={closePanel} pdfOriginal={mode === 'original'} />
       <SleepSheet open={panel === 'sleep'} onClose={closePanel} />
       {doc && <TocSheet open={panel === 'toc'} onClose={closePanel} doc={doc} index={index} file={file} />}
       {doc && (

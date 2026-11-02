@@ -304,23 +304,38 @@ export function useReaderSync(container: HTMLElement | null, surface: TextSurfac
     session().seekTo(sentenceAt(index, a.block, a.offset), true)
   }, [container, surface, index])
 
-  const onTap = useCallback(
-    (e: React.MouseEvent) => {
-      if (!surface || !index) return
+  /**
+   * What a tap at this point would jump to (null: nothing — and a tap that ends a selection clears it here).
+   * Read at the moment of the tap, so a caller may delay the jump itself (double-tap window in PDF Original).
+   */
+  const tapPoint = useCallback(
+    (e: { target: EventTarget | null; clientX: number; clientY: number }): TextPoint | null => {
+      if (!surface || !index) return null
       // a tap ends a long-press selection instead of jumping
-      if (Date.now() < readerSelection.suppressTapUntil) return
-      if (readerSelection.active) return readerSelection.clear()
+      if (Date.now() < readerSelection.suppressTapUntil) return null
+      if (readerSelection.active) {
+        readerSelection.clear()
+        return null
+      }
       const sel = window.getSelection()
-      if (sel && !sel.isCollapsed) return
-      if ((e.target as HTMLElement).closest('button, a, input')) return
+      if (sel && !sel.isCollapsed) return null
+      if ((e.target as HTMLElement | null)?.closest('button, a, input')) return null
       const c = caretFromPoint(e.clientX, e.clientY)
-      if (!c) return
+      if (!c) return null
       const p = surface.locate(c.node, c.offset)
-      if (!p || index.blocks[p.block]?.skippedAll) return
-      playFrom(p, true)
+      if (!p || index.blocks[p.block]?.skippedAll) return null
+      return p
     },
-    [surface, index, playFrom],
+    [surface, index],
   )
 
-  return { highlighter, viewBlock, jumpVisible, jumpToCurrent, playFromView, onTap, onSurfaceUpdated, playFrom, scroller: scroller.current! }
+  const onTap = useCallback(
+    (e: React.MouseEvent) => {
+      const p = tapPoint(e)
+      if (p) playFrom(p, true)
+    },
+    [tapPoint, playFrom],
+  )
+
+  return { highlighter, viewBlock, jumpVisible, jumpToCurrent, playFromView, onTap, tapPoint, onSurfaceUpdated, playFrom, scroller: scroller.current! }
 }

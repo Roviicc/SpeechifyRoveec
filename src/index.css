@@ -330,6 +330,32 @@ button {
 [data-theme='dark'] .pdf-page canvas {
   filter: brightness(0.92);
 }
+/* "Dark pages": light text on a dark page; hue-rotate puts the colours of pictures back roughly where they were.
+   Only the canvas is filtered — the text layer (and the highlights drawn on it) sits above it untouched. */
+[data-theme='dark'] .dark-pages .pdf-page {
+  background: #1d1f24;
+}
+[data-theme='dark'] .dark-pages .pdf-page canvas {
+  filter: invert(0.88) hue-rotate(180deg);
+}
+
+/* PDF "Text" mode: where each page of the original starts (decoration only: not text, not read aloud) */
+.page-marker {
+  margin: 1.6em 0 1.2em;
+  text-align: center;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  -webkit-user-select: none;
+  user-select: none;
+}
+.page-marker::before {
+  content: attr(data-label);
+}
+.page-marker:first-child {
+  margin-top: 0.4em;
+}
 .textLayer {
   position: absolute;
   text-align: initial;

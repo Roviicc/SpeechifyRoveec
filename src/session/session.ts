@@ -1,5 +1,6 @@
 import { Player, type SeekOffset } from '@/engine/voice/player/player'
-import { createBackend } from '@/engine/voice/select'
+import { createBackend, isFakeVoice } from '@/engine/voice/select'
+import { isVoiceInstalled } from '@/engine/voice/install'
 import type { TtsBackend, VoiceModel } from '@/engine/voice/types'
 import type { BookIndex } from '@/engine/book/bookIndex'
 import { getVoicePref, setAutoVoice } from '@/engine/voice/choice/engineChoice'
@@ -172,6 +173,50 @@ class Session {
     })
     this.indexListeners.forEach((fn) => fn(idx))
     updateMediaPosition(this)
+    void this.preloadVoice()
+  }
+
+  /** If the voice is already on this device, load it in the background so the first play starts quickly. */
+  private async preloadVoice() {
+    if (isFakeVoice() || usePlayback.getState().model.status !== 'idle') return
+    if (await isVoiceInstalled(this.voice()).catch(() => false)) void this.ensureModel()
+  }
+
+  /**
+   * Run `start` now, or first ask before a voice download: when no voice has been loaded yet and the voice's files
+   * are not on this device, a sheet asks for OK (size, offline, mobile data). The sheet calls confirmDownload().
+   */
+  private withDownloadConsent(start: () => void, beforeAsking?: () => void) {
+    if (isFakeVoice() || usePlayback.getState().model.status !== 'idle') return start()
+    void isVoiceInstalled(this.voice())
+      .catch(() => false)
+      .then((installed) => {
+        if (installed) return start()
+        beforeAsking?.()
+        this.pendingStart = start
+        usePlayback.setState({ downloadPrompt: this.voice() })
+      })
+  }
+
+  private pendingStart: (() => void) | null = null
+
+  /** The user agreed to download the voice: start what they asked for. */
+  confirmDownload() {
+    usePlayback.setState({ downloadPrompt: null })
+    const start = this.pendingStart
+    this.pendingStart = null
+    void this.ensureModel()
+    start?.()
+  }
+
+  /** Load the current voice (asking first if it must be downloaded), without starting playback. */
+  prepareVoice() {
+    this.withDownloadConsent(() => void this.ensureModel())
+  }
+
+  cancelDownload() {
+    usePlayback.setState({ downloadPrompt: null })
+    this.pendingStart = null
   }
 
   close() {
@@ -200,8 +245,10 @@ class Session {
   }
 
   play() {
-    void this.ensureModel()
-    this.player.play()
+    this.withDownloadConsent(() => {
+      void this.ensureModel()
+      this.player.play()
+    })
   }
 
   toggle() {
@@ -212,8 +259,15 @@ class Session {
   seekTo(target: Locator | number, autoplay?: boolean, offset: SeekOffset = 0) {
     if (!this.index) return
     const i = typeof target === 'number' ? target : resolveStart(this.index, target)
-    if (autoplay) void this.ensureModel()
-    this.player.seek(i, offset, autoplay)
+    if (!autoplay) return this.player.seek(i, offset, autoplay)
+    this.withDownloadConsent(
+      () => {
+        void this.ensureModel()
+        this.player.seek(i, offset, true)
+      },
+      // while the download question is open, already move to the tapped spot
+      () => this.player.seek(i, offset, false),
+    )
   }
 
   nextSection(dir: 1 | -1) {

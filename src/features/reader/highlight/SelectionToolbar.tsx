@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Play, StickyNote } from 'lucide-react'
+import { BookOpenText, Play, StickyNote } from 'lucide-react'
+import { useSettings } from '@/state/settings'
+import { lookUp } from '@/features/reader/lookup'
 import type { TextPoint, TextSurface } from './surface'
 import { HIGHLIGHT_COLORS } from '@/features/reader/sheets/constants'
 import type { HighlightColor } from '@/data/db'
@@ -11,7 +13,7 @@ export interface SelectionInfo {
   rect: DOMRect
 }
 
-/** Floating toolbar shown over a text selection: 4 highlight colours, note, play from here. */
+/** Floating toolbar shown over a text selection: 4 highlight colours, note, look up, play from here. */
 export function SelectionToolbar({
   container,
   surface,
@@ -24,6 +26,7 @@ export function SelectionToolbar({
   onPlayFrom: (p: TextPoint) => void
 }) {
   const [sel, setSel] = useState<SelectionInfo | null>(null)
+  const lookupApp = useSettings((s) => s.lookup)
   useEffect(() => {
     let t: ReturnType<typeof setTimeout>
     const update = () => {
@@ -49,7 +52,7 @@ export function SelectionToolbar({
   }, [container, surface])
   if (!sel) return null
   const top = Math.max(64, sel.rect.top - 60)
-  const left = Math.min(Math.max(8, sel.rect.left + sel.rect.width / 2 - 130), window.innerWidth - 268)
+  const left = Math.min(Math.max(8, sel.rect.left + sel.rect.width / 2 - 150), window.innerWidth - 308)
   const done = () => {
     window.getSelection()?.removeAllRanges()
     setSel(null)
@@ -84,6 +87,14 @@ export function SelectionToolbar({
         }}
       >
         <StickyNote size={20} />
+      </button>
+      <button
+        aria-label="Look up"
+        data-testid="lookup"
+        className="grid h-10 w-10 place-items-center rounded-full"
+        onClick={() => void lookUp(sel.text, lookupApp)}
+      >
+        <BookOpenText size={20} />
       </button>
       <button
         aria-label="Play from here"

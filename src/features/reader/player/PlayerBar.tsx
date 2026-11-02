@@ -3,37 +3,7 @@ import { ChevronsLeft, ChevronsRight, Loader2, Pause, Play, SkipBack, SkipForwar
 import { session } from '@/session/session'
 import { usePlayback } from '@/state/playback'
 import { formatMinutes, formatTime, IconButton } from '@/ui/controls'
-
-function ModelProgress() {
-  const model = usePlayback((s) => s.model)
-  if (model.status !== 'downloading' && model.status !== 'loading' && model.status !== 'error') return null
-  const pct = model.fraction !== null ? Math.round(model.fraction * 100) : null
-  return (
-    <div className="px-5 pt-3" data-testid="model-progress" aria-live="polite">
-      {model.status === 'error' ? (
-        <p className="text-sm text-red-600">
-          Couldn’t load the voice: {model.error}.{' '}
-          <button className="font-semibold underline" onClick={() => void session().ensureModel()}>
-            Retry
-          </button>
-        </p>
-      ) : (
-        <>
-          <div className="mb-1 flex justify-between text-xs text-muted">
-            <span>{model.status === 'downloading' ? 'Downloading voice model… (one time only)' : 'Preparing voice (testing your device’s speed)…'}</span>
-            {pct !== null && model.status === 'downloading' && <span>{pct}%</span>}
-          </div>
-          <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
-            <div
-              className={`h-full rounded-full bg-primary transition-[width] ${pct === null || model.status === 'loading' ? 'w-1/3 animate-pulse' : ''}`}
-              style={pct !== null && model.status === 'downloading' ? { width: `${pct}%` } : undefined}
-            />
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
+import { ModelProgress } from '@/features/voice/ModelProgress'
 
 /** Bottom player: seekable progress, « play », chapter skip and the speed button. */
 export function PlayerBar({ onSpeed, sectionLabel = 'chapter' }: { onSpeed: () => void; sectionLabel?: string }) {

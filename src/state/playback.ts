@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { PlayerState } from '@/engine/voice/player/player'
+import type { VoiceModel } from '@/engine/voice/types'
 
 export interface ModelStatus {
   status: 'idle' | 'downloading' | 'loading' | 'ready' | 'error'
@@ -7,6 +8,10 @@ export interface ModelStatus {
   loadedBytes: number
   totalBytes: number
   error?: string
+  /** loading a voice that is already stored on this device (so the UI says "Loading", not "Downloading") */
+  fromDevice?: boolean
+  /** which voice is loading */
+  voice?: VoiceModel
 }
 
 export const IDLE_MODEL: ModelStatus = { status: 'idle', fraction: null, loadedBytes: 0, totalBytes: 0 }
@@ -35,6 +40,8 @@ export interface PlaybackState {
   rtf?: number
   sleep: SleepTimer
   error?: string
+  /** a first-time voice download is waiting for the user's OK (shown as a sheet) */
+  downloadPrompt?: VoiceModel | null
 }
 
 export const usePlayback = create<PlaybackState>()(() => ({

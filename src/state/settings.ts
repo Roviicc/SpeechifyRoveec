@@ -7,6 +7,8 @@ export type FontFamily = 'serif' | 'sans' | 'dyslexic'
 export type Margin = 'narrow' | 'normal' | 'wide'
 
 export interface Settings {
+  /** where "Look up" sends a selected word (device-specific, not synced) */
+  lookup: 'share' | 'colordict'
   theme: Theme
   fontSize: number
   fontFamily: FontFamily
@@ -24,6 +26,7 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
+  lookup: 'share',
   theme: 'system',
   fontSize: 19,
   fontFamily: 'serif',

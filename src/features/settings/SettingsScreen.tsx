@@ -8,7 +8,7 @@ import { StorageSection } from './StorageSection'
 
 export function SettingsScreen() {
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 pb-8" data-testid="settings">
+    <div className="mx-auto w-full max-w-2xl px-4 pb-16" data-testid="settings">
       <header className="safe-top flex h-16 items-center">
         <h1 className="text-[28px] font-bold tracking-tight">Settings</h1>
       </header>

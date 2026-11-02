@@ -68,3 +68,12 @@ keeps `engine/` free of React/app layers and `data/` + `sync/` free of screens. 
 Kokoro and Piper share one worker client (`voice/shared/workerVoiceClient.ts`) and one worker loop (`serveVoice.ts`).
 Build: the onnxruntime `.wasm` copies Vite emits are dropped (both voices load the runtime from the transformers.js CDN
 dist, the same file for both), saving 36 MB.
+
+**2026-11-02 — Voice downloads + Look up.** The app now checks what is really stored (Kokoro: Cache Storage
+'transformers-cache' + 'kokoro-voices'; Piper: OPFS folder 'piper') via `engine/voice/install.ts`. Loading a stored voice
+after a restart shows "Loading the … voice", never "Downloading"; a stored voice is preloaded when a book opens.
+First-time downloads ask first (Google Lens-style sheet: size, offline afterwards, free space, mobile-data warning).
+Settings → Voice is a list (Auto / Natural / Fast) with per-voice status (download / progress ring / On device) and
+Remove. "Look up" in the selection toolbar sends the word to the Android share picker (pick ColorDict, Translate…), or
+experimentally straight to ColorDict via an `intent:` URL (`colordict.intent.action.SEARCH`); a browser-launched
+intent may be refused by ColorDict, so the app says so and suggests the share picker.

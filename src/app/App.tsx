@@ -11,6 +11,7 @@ import { usePlayback } from '@/state/playback'
 import { applyTheme, useSettings } from '@/state/settings'
 import { Thumb } from '@/ui/controls'
 import { useToasts } from '@/ui/toast'
+import { DownloadVoiceSheet } from '@/features/voice/DownloadVoiceSheet'
 
 function MiniPlayer() {
   const { bookId, title, cover, state } = usePlayback()
@@ -127,6 +128,7 @@ export function App() {
           if (id) navigate({ name: 'reader', bookId: id })
         }}
       />
+      <DownloadVoiceSheet />
       <Toasts />
       <DebugOverlay />
     </div>

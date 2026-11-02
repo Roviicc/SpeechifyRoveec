@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { ListTree, Locate, Play } from 'lucide-react'
+import { ListTree, Locate, Maximize, Minimize, Play } from 'lucide-react'
 import { session } from '@/session/session'
 import { navigate } from '@/app/router'
 import { useSettings } from '@/state/settings'
@@ -20,6 +20,7 @@ import { useResumeOffer } from '@/features/reader/hooks/useResumeOffer'
 import { useNotes } from '@/features/reader/hooks/useNotes'
 import { useReaderShortcuts } from '@/features/reader/hooks/useReaderShortcuts'
 import { useSearchHit } from '@/features/reader/hooks/useSearchHit'
+import { useFullscreen } from '@/features/reader/hooks/useFullscreen'
 import type { Panel } from './panels'
 import type { TextSurface } from '@/features/reader/highlight/surface'
 
@@ -39,6 +40,7 @@ export function ReaderScreen({ bookId }: { bookId: string }) {
   const { book, doc, file, error, index } = useBookLoader(bookId, resume.offer)
   const notes = useNotes(bookId, index)
   useReaderShortcuts(setPanel)
+  const full = useFullscreen()
 
   const mode: 'text' | 'original' = doc?.type === 'pdf' ? pdfMode : 'text'
   const sync = useReaderSync(container, surface, index)
@@ -83,16 +85,18 @@ export function ReaderScreen({ bookId }: { bookId: string }) {
 
   return (
     <div className="flex h-full flex-col bg-bg" data-testid="reader">
-      <TopBar
-        title={book?.title ?? ''}
-        bookmarked={!!notes.bookmarkHere}
-        onToggleBookmark={() => void notes.toggleBookmark()}
-        onTextSettings={() => setPanel('text')}
-        pdfMode={doc?.type === 'pdf' ? mode : undefined}
-        onTogglePdfMode={() => setSettings({ pdfMode: mode === 'original' ? 'text' : 'original' })}
-        menu={<ReaderMenu open={panel === 'menu'} onToggle={() => setPanel(panel === 'menu' ? null : 'menu')} onClose={closePanel} onSelect={setPanel} />}
-      />
-      {doc && <WhereBar doc={doc} index={index} viewBlock={sync.viewBlock} />}
+      {!full.on && (
+        <TopBar
+          title={book?.title ?? ''}
+          bookmarked={!!notes.bookmarkHere}
+          onToggleBookmark={() => void notes.toggleBookmark()}
+          onTextSettings={() => setPanel('text')}
+          pdfMode={doc?.type === 'pdf' ? mode : undefined}
+          onTogglePdfMode={() => setSettings({ pdfMode: mode === 'original' ? 'text' : 'original' })}
+          menu={<ReaderMenu open={panel === 'menu'} onToggle={() => setPanel(panel === 'menu' ? null : 'menu')} onClose={closePanel} onSelect={setPanel} />}
+        />
+      )}
+      {doc && !full.on && <WhereBar doc={doc} index={index} viewBlock={sync.viewBlock} />}
 
       {/* body */}
       <div className="relative min-h-0 flex-1">
@@ -123,7 +127,7 @@ export function ReaderScreen({ bookId }: { bookId: string }) {
         )}
 
         {sync.jumpVisible && (
-          <div className="anim-fade pointer-events-none absolute right-4 bottom-4 left-20 z-10 flex justify-center">
+          <div className="anim-fade pointer-events-none absolute right-20 bottom-4 left-20 z-10 flex justify-center">
             <div className="pointer-events-auto flex h-11 items-center overflow-hidden rounded-full border border-line bg-bg text-sm font-semibold text-fg shadow-[var(--shadow)]">
               <button onClick={sync.playFromView} data-testid="play-from-here" className="flex h-full items-center gap-1.5 pr-3 pl-4 hover:bg-surface">
                 <Play size={15} fill="currentColor" className="text-primary" /> Play from here
@@ -136,7 +140,7 @@ export function ReaderScreen({ bookId }: { bookId: string }) {
           </div>
         )}
 
-        {doc && (
+        {doc && !full.on && (
           <button
             onClick={() => setPanel('toc')}
             aria-label="Table of contents"
@@ -146,9 +150,21 @@ export function ReaderScreen({ bookId }: { bookId: string }) {
             <ListTree size={21} />
           </button>
         )}
+
+        {doc && (
+          <button
+            onClick={full.toggle}
+            aria-label={full.on ? 'Exit full screen' : 'Full screen'}
+            aria-pressed={full.on}
+            data-testid="fullscreen-button"
+            className="absolute right-4 bottom-4 z-10 grid h-12 w-12 place-items-center rounded-full border border-line bg-bg shadow-[var(--shadow)] hover:bg-surface"
+          >
+            {full.on ? <Minimize size={20} /> : <Maximize size={20} />}
+          </button>
+        )}
       </div>
 
-      <PlayerBar onSpeed={() => setPanel('speed')} sectionLabel={doc?.type === 'pdf' ? 'page' : 'chapter'} doc={doc} index={index} />
+      {!full.on && <PlayerBar onSpeed={() => setPanel('speed')} sectionLabel={doc?.type === 'pdf' ? 'page' : 'chapter'} doc={doc} index={index} />}
 
       <SelectionToolbar container={container} surface={surface} index={index} onHighlight={(s, c, n) => void onHighlight(s, c, n)} onPlayFrom={(p) => sync.playFrom(p)} />
 

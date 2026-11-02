@@ -241,7 +241,7 @@ export function PdfView({
           />
         ))}
       </div>
-      <div className="pointer-events-none sticky bottom-3 z-10 flex justify-end px-3" style={{ left: 0 }}>
+      <div className="pointer-events-none sticky bottom-3 z-10 flex justify-end pr-20 pl-3" style={{ left: 0 }}>
         <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-line bg-bg/95 p-1 shadow-[var(--shadow)] backdrop-blur">
           <button aria-label="Zoom out" className="grid h-10 w-10 place-items-center rounded-full hover:bg-surface disabled:opacity-40" disabled={zoom <= MIN_ZOOM} onClick={() => zoomTo(zoom - 0.25)} data-testid="zoom-out">
             <Minus size={18} />

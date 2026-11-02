@@ -46,8 +46,18 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+
+    testOptions {
+        unitTests.includeAndroidResources = true
+        unitTests.all {
+            systemProperty 'robolectric.dependency.repo.url', 'https://maven-central.storage-download.googleapis.com/maven2/'
+            systemProperty 'robolectric.dependency.repo.id', 'google-mirror'
+        }
+    }
 }
 
 dependencies {
     implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.7.4'
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.14.1'
 }

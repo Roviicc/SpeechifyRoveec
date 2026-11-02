@@ -140,3 +140,20 @@ test('"Play from here" starts at the text on screen', async ({ page }) => {
   const vb = await voiceBlock(page)
   expect(vb === onScreen || vb === onScreen + 1).toBe(true)
 })
+
+test('Contents jumps even after scrolling away (pill showing)', async ({ page }) => {
+  await importFile(page, 'alice.epub')
+  await userScroll(page, 1800)
+  await expect(page.getByTestId('play-from-here')).toBeVisible()
+  await page.getByTestId('toc-button').click()
+  await page.getByRole('button', { name: /Chapter III/ }).click()
+  await expect(page.getByTestId('play-from-here')).toBeHidden()
+  // the chapter heading is on screen, near the reading line
+  await expect.poll(async () => {
+    const top = await page.getByText('Chapter III. A Caucus-Race and a Long Tale').first().evaluate((el) => {
+      const c = document.querySelector('[data-testid=reader-scroll]')!.getBoundingClientRect()
+      return (el.getBoundingClientRect().top - c.top) / c.height
+    })
+    return top > 0 && top < 0.5
+  }).toBe(true)
+})

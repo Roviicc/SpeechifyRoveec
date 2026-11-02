@@ -208,9 +208,19 @@ export function useReaderSync(container: HTMLElement | null, surface: TextSurfac
     const start = () => {
       if (!raf) raf = requestAnimationFrame(tick)
     }
+    let prev = player.index
     const offSentence = player.on('sentence', (i) => {
       highlighter.setSentence(i)
-      scroller.current!.scrollTo(container, surface, index, i)
+      // Only the voice reading on to the next sentence respects "the reader scrolled away".
+      // Any jump (Contents, Search, Notes, bookmarks, chapter buttons, Play from here) always shows its target.
+      const readingOn = player.isActive && i === prev + 1
+      prev = i
+      if (!readingOn) {
+        scroller.current!.resume()
+        scroller.current!.scrollTo(container, surface, index, i, { force: true })
+      } else {
+        scroller.current!.scrollTo(container, surface, index, i)
+      }
     })
     const offState = player.on('state', (st) => {
       if (st === 'playing') start()

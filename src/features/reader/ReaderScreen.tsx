@@ -122,12 +122,12 @@ export function ReaderScreen({ bookId }: { bookId: string }) {
 
         {sync.jumpVisible && (
           <div className="anim-fade pointer-events-none absolute right-4 bottom-4 left-20 z-10 flex justify-center">
-            <div className="pointer-events-auto flex h-11 items-center overflow-hidden rounded-full bg-fg text-sm font-semibold text-bg shadow-[var(--shadow)]">
-              <button onClick={sync.playFromView} data-testid="play-from-here" className="flex h-full items-center gap-1.5 pr-3 pl-4">
-                <Play size={15} fill="currentColor" /> Play from here
+            <div className="pointer-events-auto flex h-11 items-center overflow-hidden rounded-full border border-line bg-bg text-sm font-semibold text-fg shadow-[var(--shadow)]">
+              <button onClick={sync.playFromView} data-testid="play-from-here" className="flex h-full items-center gap-1.5 pr-3 pl-4 hover:bg-surface">
+                <Play size={15} fill="currentColor" className="text-primary" /> Play from here
               </button>
-              <span className="h-5 w-px bg-bg/30" aria-hidden />
-              <button onClick={sync.jumpToCurrent} data-testid="jump-to-current" className="flex h-full items-center gap-1.5 pr-4 pl-3">
+              <span className="h-5 w-px bg-line" aria-hidden />
+              <button onClick={sync.jumpToCurrent} data-testid="jump-to-current" className="flex h-full items-center gap-1.5 pr-4 pl-3 hover:bg-surface">
                 <Locate size={16} /> Jump to current
               </button>
             </div>

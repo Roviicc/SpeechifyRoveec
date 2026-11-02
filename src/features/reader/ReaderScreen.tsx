@@ -155,7 +155,7 @@ export function ReaderScreen({ bookId }: { bookId: string }) {
       <SpeedSheet open={panel === 'speed'} onClose={closePanel} />
       <TextSettingsSheet open={panel === 'text'} onClose={closePanel} />
       <SleepSheet open={panel === 'sleep'} onClose={closePanel} />
-      {doc && <TocSheet open={panel === 'toc'} onClose={closePanel} doc={doc} index={index} />}
+      {doc && <TocSheet open={panel === 'toc'} onClose={closePanel} doc={doc} index={index} file={file} />}
       {doc && (
         <SearchSheet
           open={panel === 'search'}

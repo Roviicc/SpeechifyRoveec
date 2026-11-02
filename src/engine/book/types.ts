@@ -5,7 +5,7 @@ export type MarkKind = 'i' | 'b' | 'sc' | 'sup' | 'sub' | 'code'
 /** [start, end, kind] — inline formatting range in block text (EPUB only). */
 export type Mark = [number, number, MarkKind]
 /** Block-level smart-skip classification (decided at import time). */
-export type BlockSkip = 'header' | 'footer' | 'pagenum'
+export type BlockSkip = 'header' | 'footer' | 'pagenum' | 'footnote' | 'caption' | 'table'
 
 /** [textItemIndex, blockOffset, itemOffset, length] — maps block text back to pdf.js text items. */
 export type PdfSpan = [number, number, number, number]
@@ -71,3 +71,12 @@ export interface BookDoc {
 
 /** Bump when the parser output changes so stored books are re-parsed (see repo.getContent). */
 export const DOC_VERSION = 2
+/**
+ * PDFs have their own version so PDF-only parser changes don't re-parse every EPUB. A change to the
+ * shared document shape must bump both. 3 = column order, footnote/caption/table skip blocks.
+ */
+export const PDF_DOC_VERSION = 3
+
+export function docVersion(type: BookDoc['type']): number {
+  return type === 'pdf' ? PDF_DOC_VERSION : DOC_VERSION
+}

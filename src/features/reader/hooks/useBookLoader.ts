@@ -3,7 +3,7 @@ import { session } from '@/session/session'
 import type { BookDoc } from '@/engine/book/types'
 import type { BookIndex } from '@/engine/book/bookIndex'
 import type { BookRow, ProgressRow } from '@/data/db'
-import { getBook, getContent, getFile, getProgress, touchBook } from '@/data/repo'
+import { getBook, getContent, getFile, getProgress, getStaleContent, remapPositions, touchBook } from '@/data/repo'
 import { reparseBook } from '@/features/library/import/importBook'
 
 /**
@@ -28,7 +28,10 @@ export function useBookLoader(bookId: string, onResumeOffer: (p: ProgressRow) =>
         const blob = row.type === 'pdf' || !content ? await getFile(bookId) : null
         if (!content) {
           if (!blob) throw new Error('The book file is missing.')
+          // stored parse is from an older parser version: re-parse, and move saved positions along
+          const stale = await getStaleContent(bookId)
           content = await reparseBook(row, blob)
+          if (stale) await remapPositions(bookId, stale, content).catch(() => undefined)
         }
         const progress = await getProgress(bookId)
         if (cancelled) return

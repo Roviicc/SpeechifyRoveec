@@ -1,6 +1,6 @@
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { getPdfjs } from './pdfjs'
-import { groupLines, linesToBlocks, markRepeatedLines, type PdfLine, type PdfTextItem } from './layout'
+import { groupLines, pagesToBlocks, type PdfLine, type PdfTextItem } from './layout'
 import type { BookDoc, Section, TocEntry } from '@/engine/book/types'
 
 export interface ParsedPdf {
@@ -63,10 +63,7 @@ export async function parsePdf(data: ArrayBuffer, fallbackTitle = 'Untitled', on
   if (chars < 20 * Math.max(1, Math.min(pdf.numPages, 3))) {
     throw new Error('This PDF has no text layer (scanned images). Only text-based PDFs can be read aloud.')
   }
-  markRepeatedLines(pages)
-  const allBody = pages.flat().filter((l) => !l.role).map((l) => l.h).sort((a, b) => a - b)
-  const bodyHeight = allBody[allBody.length >> 1]
-  const sections: Section[] = pages.map((lines, i) => ({ title: `Page ${i + 1}`, blocks: linesToBlocks(lines, i, bodyHeight) }))
+  const sections: Section[] = pagesToBlocks(pages).map((blocks, i) => ({ title: `Page ${i + 1}`, blocks }))
 
   const meta = await pdf.getMetadata().catch(() => null)
   const info = (meta?.info ?? {}) as { Title?: string; Author?: string }

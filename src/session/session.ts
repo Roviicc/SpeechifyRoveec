@@ -2,7 +2,7 @@ import { Player, type SeekOffset } from '@/engine/voice/player/player'
 import { createBackend, isFakeVoice } from '@/engine/voice/select'
 import { isVoiceInstalled } from '@/engine/voice/install'
 import type { TtsBackend, VoiceModel } from '@/engine/voice/types'
-import type { BookIndex } from '@/engine/book/bookIndex'
+import { sentenceAt, type BookIndex } from '@/engine/book/bookIndex'
 import { getVoicePref, setAutoVoice } from '@/engine/voice/choice/engineChoice'
 import { audioStore } from '@/data/audioCache'
 import { saveProgress } from '@/data/repo'
@@ -15,7 +15,7 @@ import { DEFAULT_SECONDS_PER_CHAR, estimateTimes, playedFraction, refineSecondsP
 import { indexBook, resolveStart, watchSettings } from './indexing'
 import { ensureModel, resetModelState } from './modelLoader'
 import { locatorOf, sectionJumpTarget } from './navigation'
-import { ProgressSaver } from './progressSaver'
+import { progressRecord, ProgressSaver } from './progressSaver'
 import { SleepTimer, type SleepMode } from './sleepTimer'
 import type { OpenBook } from './types'
 import { PREFETCH_VISIBLE, prefetchDepth, watchVisibility } from './visibility'
@@ -80,10 +80,12 @@ class Session {
     const p = this.player
     p.on('state', (state) => {
       usePlayback.setState({ state, error: state === 'error' ? usePlayback.getState().error : undefined })
+      if (state === 'playing' || state === 'buffering') this.viewLocator = null
       if (state === 'paused' || state === 'ended') void this.saveNow()
       updateMediaPosition(this)
     })
     p.on('sentence', (i) => {
+      this.viewLocator = null
       const section = this.index?.sentences[i]?.section ?? 0
       const { section: prevSection, index: prevIndex } = usePlayback.getState()
       usePlayback.setState({ index: i, section })
@@ -292,7 +294,26 @@ class Session {
     return sentenceAtFraction(this.index, f)
   }
 
+  /**
+   * Where the reader is looking, when it differs from the voice: set while reading without audio (the user scrolled),
+   * cleared as soon as the voice moves. While set, it is what gets saved, so reopening the book returns to the page
+   * the reader was on, not to where the audio stopped earlier.
+   */
+  private viewLocator: Locator | null = null
+
+  /** Remember the reading position from the screen (only when the voice is not playing). */
+  saveViewPosition(loc: Locator) {
+    if (this.player.isActive || !this.book?.persist || !this.index) return
+    this.viewLocator = loc
+    void this.saveNow()
+  }
+
   saveNow(): Promise<void> {
+    const loc = this.viewLocator
+    if (loc && this.index && !this.player.isActive) {
+      const rec = progressRecord({ book: this.book, index: this.index, sentence: sentenceAt(this.index, loc.block, loc.offset) })
+      return rec ? saveProgress({ ...rec, locator: loc }) : Promise.resolve()
+    }
     return this.progress.saveNow()
   }
 

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { ListTree, Locate } from 'lucide-react'
+import { ListTree, Locate, Play } from 'lucide-react'
 import { session } from '@/session/session'
 import { navigate } from '@/app/router'
 import { useSettings } from '@/state/settings'
@@ -94,7 +94,9 @@ export function ReaderScreen({ bookId }: { bookId: string }) {
 
       {/* body */}
       <div className="relative min-h-0 flex-1">
-        <div ref={setContainer} className="h-full overflow-auto" data-testid="reader-scroll" tabIndex={-1} onClick={sync.onTap}>
+        {/* overflow-anchor: none — Lumen keeps the reading place itself (viewAnchor); the browser's own scroll
+            anchoring would move the page behind its back while chapters settle */}
+        <div ref={setContainer} className="h-full overflow-auto [overflow-anchor:none]" data-testid="reader-scroll" tabIndex={-1} onClick={sync.onTap}>
           {!doc || !index ? (
             <p className="p-8 text-center text-muted">Opening…</p>
           ) : mode === 'original' && file ? (
@@ -119,13 +121,17 @@ export function ReaderScreen({ bookId }: { bookId: string }) {
         )}
 
         {sync.jumpVisible && (
-          <button
-            onClick={sync.jumpToCurrent}
-            data-testid="jump-to-current"
-            className="anim-fade absolute bottom-4 left-1/2 z-10 flex h-11 -translate-x-1/2 items-center gap-2 rounded-full bg-fg px-5 text-sm font-semibold text-bg shadow-[var(--shadow)]"
-          >
-            <Locate size={17} /> Jump to current
-          </button>
+          <div className="anim-fade pointer-events-none absolute right-4 bottom-4 left-20 z-10 flex justify-center">
+            <div className="pointer-events-auto flex h-11 items-center overflow-hidden rounded-full bg-fg text-sm font-semibold text-bg shadow-[var(--shadow)]">
+              <button onClick={sync.playFromView} data-testid="play-from-here" className="flex h-full items-center gap-1.5 pr-3 pl-4">
+                <Play size={15} fill="currentColor" /> Play from here
+              </button>
+              <span className="h-5 w-px bg-bg/30" aria-hidden />
+              <button onClick={sync.jumpToCurrent} data-testid="jump-to-current" className="flex h-full items-center gap-1.5 pr-4 pl-3">
+                <Locate size={16} /> Jump to current
+              </button>
+            </div>
+          </div>
         )}
 
         {doc && (

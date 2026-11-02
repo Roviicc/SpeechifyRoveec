@@ -77,3 +77,14 @@ Settings → Voice is a list (Auto / Natural / Fast) with per-voice status (down
 Remove. "Look up" in the selection toolbar sends the word to the Android share picker (pick ColorDict, Translate…), or
 experimentally straight to ColorDict via an `intent:` URL (`colordict.intent.action.SEARCH`); a browser-launched
 intent may be refused by ColorDict, so the app says so and suggests the share picker.
+
+**2026-11-02 — Reading position = where the eyes are (Step 1 of the reading plan).** `features/reader/highlight/viewAnchor.ts`
+tracks the text on the reading line (25% down, the same line auto-scroll uses, so save/restore never drifts) as
+`{block, offset, dy, kind: text|block|page}`. Without audio, a hand scroll is saved (1.2 s after it stops) via
+`session.saveViewPosition`; it wins over the voice position until the voice moves again. Layout changes (PDF
+Original <-> Text, font size, line spacing, margins, font) restore the anchor at its old height. After opening, a short
+settle loop (<= 1.5 s, every frame) re-pins the place while long chapters finish laying out, and stops the moment the
+page is moved by anything else (scrollTop changed) or by the reader. The browser's own scroll anchoring is turned off on
+the reader (`overflow-anchor: none`) because it moved the page behind the settle loop's back. Caret hits are only
+accepted when the text is really on the line (`caretPositionFromPoint` snaps across paragraph gaps). "Play from here"
+reads the line at tap time.

@@ -67,7 +67,7 @@ export function VoiceTestScreen() {
           Read this text
         </button>
       </div>
-      <div ref={setContainer} className="relative min-h-0 flex-1 overflow-auto" onClick={sync.onTap} data-testid="reader-scroll">
+      <div ref={setContainer} className="relative min-h-0 flex-1 overflow-auto [overflow-anchor:none]" onClick={sync.onTap} data-testid="reader-scroll">
         {index && <ReflowView index={index} titles={['Pasted text']} onSurface={setSurface} />}
       </div>
       <PlayerBar onSpeed={() => setSpeedOpen(true)} sectionLabel="text" />

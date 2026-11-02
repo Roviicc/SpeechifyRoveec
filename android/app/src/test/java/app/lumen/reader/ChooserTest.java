@@ -39,6 +39,7 @@ public class ChooserTest {
         install("com.socialnmobile.colordict", "com.socialnmobile.colordict.activity.Main", "colordict.intent.action.SEARCH", false);
         install("com.socialnmobile.colordict", "com.socialnmobile.colordict.activity.ProcessText", Intent.ACTION_PROCESS_TEXT, true);
         install("com.google.android.apps.translate", "com.google.android.apps.translate.copydrop.gm3.TapToTranslateActivity", Intent.ACTION_PROCESS_TEXT, true);
+        install("com.example.sharedict", "com.example.sharedict.ShareActivity", Intent.ACTION_SEND, true);
 
         // first lookup with nothing chosen yet -> chooser dialog
         DictionaryActivity a = Robolectric.buildActivity(DictionaryActivity.class,
@@ -46,10 +47,11 @@ public class ChooserTest {
         AlertDialog dialog = (AlertDialog) ShadowAlertDialog.getLatestDialog();
         assertNotNull("chooser shown", dialog);
         ListView list = dialog.getListView();
-        assertEquals(2, list.getAdapter().getCount()); // ColorDict once (popup), Translate
-        int colorDict = -1;
-        for (int i = 0; i < list.getAdapter().getCount(); i++)
-            if (String.valueOf(list.getAdapter().getItem(i)).contains("popup")) colorDict = i;
+        // 3 group headers + ColorDict (once, in the popup group) + Translate + the share-only app
+        assertEquals(6, list.getAdapter().getCount());
+        assertEquals(false, list.getAdapter().isEnabled(0)); // header
+        int colorDict = 1; // first app, under "Dictionaries — open as a popup"
+        assertEquals(true, list.getAdapter().isEnabled(colorDict));
         Shadows.shadowOf(dialog).clickOnItem(colorDict);
         Intent started = Shadows.shadowOf(a).getNextStartedActivity();
         assertNotNull(started);

@@ -1,3 +1,4 @@
+import type { LookupApp } from '@/features/reader/lookup'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { DEFAULT_SKIP, type PronunciationEntry, type SkipOptions } from '@/engine/text/types'
@@ -8,7 +9,7 @@ export type Margin = 'narrow' | 'normal' | 'wide'
 
 export interface Settings {
   /** where "Look up" sends a selected word (device-specific, not synced) */
-  lookup: 'share' | 'colordict'
+  lookup: LookupApp
   theme: Theme
   fontSize: number
   fontFamily: FontFamily

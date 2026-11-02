@@ -82,3 +82,14 @@ describe('ReflowSurface across multiple text nodes', () => {
     expect(surface.rangesFor(2, 0, 0)).toEqual([])
   })
 })
+
+describe('look up', () => {
+  it('builds dictionary links and the ColorDict intent', async () => {
+    const { cleanQuery, colorDictIntent, lookupUrl } = await import('@/features/reader/lookup')
+    expect(cleanQuery('  “Serendipity,”  ')).toBe('Serendipity')
+    expect(lookupUrl('merriam', 'walkable city')).toBe('https://www.merriam-webster.com/dictionary/walkable%20city')
+    expect(lookupUrl('wiktionary', 'Walkable City')).toBe('https://en.wiktionary.org/wiki/walkable_city')
+    expect(lookupUrl('share', 'x')).toBeNull()
+    expect(colorDictIntent('pedestrian')).toContain('action=colordict.intent.action.SEARCH;package=com.socialnmobile.colordict;S.EXTRA_QUERY=pedestrian;')
+  })
+})

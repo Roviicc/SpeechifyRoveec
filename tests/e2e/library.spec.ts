@@ -126,10 +126,11 @@ test('settings: pronunciation dictionary and sleep timer', async ({ page }, info
   await expect(page.getByTestId('voice-row-auto').getByRole('radio')).toHaveAttribute('aria-checked', 'true')
   await expect(page.getByTestId('voice-row-kokoro')).toContainText('MB')
   await expect(page.getByTestId('voice-row-piper')).toContainText('MB')
-  // look-up app setting
-  await page.getByRole('radio', { name: 'ColorDict' }).click()
-  await expect(page.getByText('Opens ColorDict directly')).toBeVisible()
-  await page.getByRole('radio', { name: 'Choose app' }).click()
+  // dictionary app setting
+  await page.getByTestId('dictionary-app').click()
+  await page.getByRole('radio', { name: /ColorDict/ }).click()
+  await page.getByTestId('sheet-close').click()
+  await expect(page.getByTestId('dictionary-app')).toContainText('ColorDict')
   await expect(page.getByTestId('dictionary')).toContainText('Al-eese')
   await shot(page, info, 'settings-light')
   await importFile(page, 'alice.epub')

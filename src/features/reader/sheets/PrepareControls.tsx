@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react'
-import { ArrowDownToLine, AudioLines, CircleCheck } from 'lucide-react'
+import { ArrowDownToLine, AudioLines, CircleCheck, CloudAlert, CloudCheck, CloudDownload, CloudUpload } from 'lucide-react'
 import { session } from '@/session/session'
 import { usePrepare } from '@/state/prepare'
+import { useAudioShare } from '@/state/audioShare'
+import { useSettings } from '@/state/settings'
+import type { BookShare } from '@/sync/audio/audioShare'
+import { autoDownloadAllowed } from '@/sync/audio/network'
 import { usePlayback } from '@/state/playback'
 import { opusSupported } from '@/engine/voice/player/opus'
 import { audioBytesPerSecond } from '@/session/storageRoom'
@@ -67,40 +71,147 @@ export function PrepareHeader({ bookId, totalChars, have, count }: { bookId: str
     }`
 
   return (
-    <div className="mb-3 flex items-center gap-3 rounded-[16px] border border-line px-3 py-2.5" data-testid="prepare-summary">
-      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary-soft text-primary" aria-hidden>
-        {mine ? <ProgressRing fraction={mine.total ? mine.done / mine.total : 0} size={24} /> : ready ? <CircleCheck size={18} /> : <AudioLines size={18} />}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-[15px] font-semibold">{busy ? 'Preparing audio' : 'Prepare audio ahead'}</span>
-        <span className="block truncate text-xs text-muted" aria-live="polite" data-testid="prepare-detail">
-          {detail}
+    <div className="mb-3 rounded-[16px] border border-line px-3 py-2.5" data-testid="prepare-summary">
+      <div className="flex items-center gap-3">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary-soft text-primary" aria-hidden>
+          {mine ? <ProgressRing fraction={mine.total ? mine.done / mine.total : 0} size={24} /> : ready ? <CircleCheck size={18} /> : <AudioLines size={18} />}
         </span>
-      </span>
-      {busy ? (
-        <button className="h-9 shrink-0 rounded-full bg-surface px-4 text-sm font-semibold" onClick={() => session().preparer.cancel()} data-testid="prepare-cancel">
-          Cancel
-        </button>
-      ) : (
-        !ready && (
-          <button
-            className="h-9 shrink-0 rounded-full bg-primary px-4 text-sm font-semibold text-on-primary"
-            onClick={() => session().prepare(bookId, 0, count - 1, 'Whole book')}
-            data-testid="prepare-all"
-          >
-            Prepare all
+        <span className="min-w-0 flex-1">
+          <span className="block text-[15px] font-semibold">{busy ? 'Preparing audio' : 'Prepare audio ahead'}</span>
+          <span className="block truncate text-xs text-muted" aria-live="polite" data-testid="prepare-detail">
+            {detail}
+          </span>
+        </span>
+        {busy ? (
+          <button className="h-9 shrink-0 rounded-full bg-surface px-4 text-sm font-semibold" onClick={() => session().preparer.cancel()} data-testid="prepare-cancel">
+            Cancel
           </button>
-        )
+        ) : (
+          !ready && (
+            <button
+              className="h-9 shrink-0 rounded-full bg-primary px-4 text-sm font-semibold text-on-primary"
+              onClick={() => session().prepare(bookId, 0, count - 1, 'Whole book')}
+              data-testid="prepare-all"
+            >
+              Prepare all
+            </button>
+          )
+        )}
+      </div>
+      <DriveShareLine bookId={bookId} />
+    </div>
+  )
+}
+
+/** Whether prepared audio is shared through Drive right now (connected, signed in, setting on). */
+export function useShareOn(): boolean {
+  // re-render when the setting or the Drive state changes
+  useSettings((s) => s.shareAudio)
+  useAudioShare((s) => s.books)
+  return session().shareOn()
+}
+
+const chapters = (n: number) => `${n} ${n === 1 ? 'chapter' : 'chapters'}`
+
+/** The prepare card's Drive line: uploading / downloading / ready in Drive / not uploaded yet / uploaded. */
+function DriveShareLine({ bookId }: { bookId: string }) {
+  const on = useShareOn()
+  const b = useAudioShare((s) => s.books[bookId])
+  const error = useAudioShare((s) => s.error)
+  useEffect(() => {
+    if (on) void session().share.refresh(bookId)
+  }, [on, bookId])
+  if (!on) return null
+
+  let icon = <CloudCheck size={16} />
+  let text: string
+  let action: { label: string; testId: string; run: () => void } | null = null
+  if (b?.upload) {
+    icon = <CloudUpload size={16} />
+    text = `Uploading to Drive ${b.upload.done + 1}/${b.upload.total}`
+  } else if (b?.download) {
+    icon = <CloudDownload size={16} />
+    text = `Downloading from Drive ${b.download.done + 1}/${b.download.total}`
+  } else if (b?.missing.length) {
+    icon = <CloudDownload size={16} />
+    const auto = autoDownloadAllowed() && !b.autoBlocked
+    text = `${chapters(b.missing.length)} ready in Drive${auto ? ' — downloading on Wi‑Fi' : ''}`
+    action = { label: 'Download now', testId: 'drive-download', run: () => void session().share.download(bookId, { manual: true }) }
+  } else if (error) {
+    icon = <CloudAlert size={16} />
+    text = error
+    if (b?.notUploaded.length) action = { label: 'Try again', testId: 'drive-upload', run: () => void session().share.upload(bookId) }
+  } else if (b?.notUploaded.length) {
+    icon = <CloudUpload size={16} />
+    text = `${chapters(b.notUploaded.length)} not in Drive yet`
+    action = { label: 'Upload to Drive', testId: 'drive-upload', run: () => void session().share.upload(bookId) }
+  } else if (b?.remote?.length) {
+    text = `Uploaded to Drive · ${chapters(b.remote.length)}`
+  } else if (!b?.remote) {
+    text = 'Checking Google Drive…'
+  } else return null
+
+  return (
+    <div className="mt-2 flex min-h-9 items-center gap-2 border-t border-line pt-2 text-xs text-muted" data-testid="drive-status">
+      <span className="shrink-0 text-primary" aria-hidden>
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1" aria-live="polite" data-testid="drive-detail">
+        {text}
+      </span>
+      {action && (
+        <button className="h-9 shrink-0 rounded-full bg-surface px-3 text-sm font-semibold text-fg" onClick={action.run} data-testid={action.testId}>
+          {action.label}
+        </button>
       )}
     </div>
   )
 }
 
+const overlaps = (r: { from: number; to: number }, start: number, end: number) => r.from <= end && r.to >= start
+
+/** Drive state of one chapter row (null = nothing Drive-specific to show). */
+function rowShare(share: BookShare | undefined, start: number, end: number): 'uploading' | 'downloading' | 'cloud' | null {
+  if (!share) return null
+  if (share.download && overlaps(share.download.current, start, end)) return 'downloading'
+  if (share.upload && overlaps(share.upload.current, start, end)) return 'uploading'
+  if (share.missing.some((p) => overlaps(p, start, end))) return 'cloud'
+  return null
+}
+
 /** Per-chapter control: Prepare / progress ring (tap to cancel) / ready mark. */
 export function PrepareButton({ bookId, label, start, end, have, describedBy }: { bookId: string; label: string; start: number; end: number; have: number; describedBy?: string }) {
   const st = usePrepare()
+  const share = useAudioShare((s) => s.books[bookId])
+  const on = useShareOn()
   const total = end - start + 1
   if (total <= 0) return <span className="w-11 shrink-0" aria-hidden />
+  const drive = on ? rowShare(share, start, end) : null
+  if (drive === 'uploading')
+    return (
+      <span className="grid h-11 w-11 shrink-0 place-items-center text-primary" role="img" aria-label="Audio ready, uploading to Drive" aria-describedby={describedBy} data-testid="toc-uploading">
+        <CloudUpload size={18} className="animate-pulse" />
+      </span>
+    )
+  if (drive === 'downloading' && have < total)
+    return (
+      <span className="grid h-11 w-11 shrink-0 place-items-center" role="img" aria-label="Downloading audio from Drive" aria-describedby={describedBy} data-testid="toc-downloading">
+        <ProgressRing fraction={null} size={22} />
+      </span>
+    )
+  if (drive === 'cloud' && have < total && !coveringJob(st, bookId, start, end))
+    return (
+      <button
+        className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-primary hover:bg-surface"
+        aria-label="Prepared audio is in Drive. Download"
+        aria-describedby={describedBy}
+        title="Download prepared audio from Drive"
+        onClick={() => void session().share.download(bookId, { manual: true, range: { from: start, to: end } })}
+        data-testid="toc-cloud"
+      >
+        <CloudDownload size={18} />
+      </button>
+    )
   if (have >= total)
     return (
       <span className="grid h-11 w-11 shrink-0 place-items-center text-primary" role="img" aria-label="Audio ready" aria-describedby={describedBy} data-testid="toc-prepared">

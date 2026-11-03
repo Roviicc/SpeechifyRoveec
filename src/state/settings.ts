@@ -34,6 +34,8 @@ export interface Settings {
   darkPages: boolean
   /** how hard "Prepare" works the device: full speed, or resting between sentences (cooler, quieter, less battery) */
   prepareSpeed: PrepareSpeed
+  /** share prepared audio between devices through Google Drive (when Drive is connected) */
+  shareAudio: boolean
   /** ms timestamp of the last change to any synced field */
   updatedAt: number
 }
@@ -56,11 +58,12 @@ export const DEFAULT_SETTINGS: Settings = {
   snapPages: false,
   darkPages: true,
   prepareSpeed: 'full',
+  shareAudio: true,
   updatedAt: 0,
 }
 
 /** Settings that stay on this device (not part of sync.json). */
-const LOCAL_ONLY = new Set<string>(['pdfMode', 'prepareSpeed'])
+const LOCAL_ONLY = new Set<string>(['pdfMode', 'prepareSpeed', 'shareAudio'])
 
 interface SettingsStore extends Settings {
   set: (patch: Partial<Settings>) => void

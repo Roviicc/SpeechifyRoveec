@@ -21,6 +21,13 @@ export function onRemoteProgress(fn: (bookIds: string[]) => void) {
   return () => progressListeners.delete(fn)
 }
 
+const syncedListeners = new Set<() => void>()
+/** Fires after every successful sync (e.g. to look for prepared audio in Drive). */
+export function onSynced(fn: () => void) {
+  syncedListeners.add(fn)
+  return () => syncedListeners.delete(fn)
+}
+
 export const settingsBridge: SettingsBridge = {
   get: settingsSnapshot,
   replace: (s) => useSettings.getState().replace(s),
@@ -48,6 +55,7 @@ export function syncNow(interactive = false): Promise<void> {
       useSync.setState({ status: 'idle', lastSync: Date.now() })
       notifyChange()
       if (changedProgress.length) progressListeners.forEach((fn) => fn(changedProgress))
+      syncedListeners.forEach((fn) => fn())
     } catch (e) {
       if (e instanceof DriveAuthError || e instanceof NeedsSignIn) {
         forgetToken()

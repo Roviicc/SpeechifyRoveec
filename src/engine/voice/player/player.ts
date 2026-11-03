@@ -15,7 +15,8 @@ export interface AudioLike {
 }
 
 export interface AudioStore {
-  get(bookId: string, index: number, text: string): Promise<{ blob: Blob; duration: number } | null>
+  /** Stored audio of a sentence (`prepared`: generated ahead, possibly by another voice). */
+  get(bookId: string, index: number, text: string): Promise<{ blob: Blob; duration: number; prepared?: boolean } | null>
   put(bookId: string, index: number, text: string, blob: Blob, duration: number): Promise<void>
 }
 
@@ -50,6 +51,12 @@ export interface PlayerOptions {
   prefetch?: number
   createUrl?: (b: Blob) => string
   revokeUrl?: (u: string) => void
+  /**
+   * Called before the live voice is asked for a sentence that has no stored audio (`current`: it is the sentence to
+   * play now, not a prefetch). Lets the app load the voice only when it is really needed (sentences with prepared
+   * audio never touch it). Throwing CancelledError skips the generation.
+   */
+  beforeGenerate?: (current: boolean) => Promise<void> | void
 }
 
 /** Real-time-factor samples kept for the rolling average. */
@@ -73,6 +80,7 @@ export class Player {
   private readonly audio: AudioLike
   private readonly createUrl: (b: Blob) => string
   private readonly revokeUrl: (u: string) => void
+  private readonly beforeGenerate?: (current: boolean) => Promise<void> | void
   private prefetchDepth: number
   /** largest depth ever used: audio already generated within it is kept even after the depth drops again */
   private retainDepth: number
@@ -96,6 +104,7 @@ export class Player {
     this.retainDepth = this.prefetchDepth
     this.createUrl = opts.createUrl ?? ((b) => URL.createObjectURL(b))
     this.revokeUrl = opts.revokeUrl ?? ((u) => URL.revokeObjectURL(u))
+    this.beforeGenerate = opts.beforeGenerate
     this.audio = opts.audio ?? new Audio()
     this.audio.preservesPitch = true
     this.audio.addEventListener('ended', () => this.onEnded())
@@ -432,6 +441,10 @@ export class Player {
         ;({ blob, duration } = cached)
       } else {
         if (epoch !== this.epoch) throw new CancelledError()
+        if (this.beforeGenerate) {
+          await this.beforeGenerate(i === this.index)
+          if (epoch !== this.epoch) throw new CancelledError()
+        }
         const g = await this.backend.generate(text, epoch)
         blob = g.wav
         duration = g.duration

@@ -135,3 +135,43 @@ device-local): Full / Balanced / Light rest 0 / 0.4x / 1.5x of each sentence's s
 throttled. Not done: a second parallel Kokoro worker for WebGPU (it would load the model twice; left as a follow-up).
 Changing smart-skip/pronunciation mid-run makes the rest of that run write rows the new index won't match (harmless, the
 row is simply regenerated when played).
+
+**2026-11-03 — Prepared audio travels between devices through Google Drive.** Prepare on the PC (fast GPU), listen on
+the phone (Kokoro RTF ~8.7 there). *Where:* the hidden `appDataFolder` (scope `drive.appdata`, already requested), one
+**pack** file per chapter range (`sync/audio/pack.ts`): `"LMAP"` + uint32-LE header length + JSON header `{format: 1,
+bookId, voice, from, to, entries: [{index, textHash, hash, voice, duration, offset, length, mime}]}` + the sentences'
+Ogg Opus blobs back to back (stored bytes as is, no re-encode). The Drive file carries `appProperties` `{kind:
+'lumen-audio', format, bookId, voice, from, to, entries, sig}` so listing (`appProperties has {key='bookId' …}`) needs no
+download. `sig` = hash of (index, hash, textHash, byte length, duration ms) of every entry: a pack whose sig Drive
+already has is not uploaded again; a changed one replaces the same Drive file (PATCH). Ranges = one per top-level
+Contents chapter (text before the first chapter joins it; > 1500 sentences split; no TOC: 300-sentence chunks),
+`sync/audio/packRanges.ts`. Uploads ≤ 5 MB are multipart, bigger ones resumable in 8 MB chunks (after a failed chunk the
+client asks Drive how much arrived and continues); transient errors (network, 429, 5xx, rate limits) retry with back-off
+1 s / 4 s / 15 s; offline work waits and resumes on `online` / connection change; `storageQuotaExceeded` → "Google
+Drive is full…" toast and card line. All Drive audio work runs one task at a time in the background (`AudioShare`).
+*When:* upload 4 s after preparation writes sentences and 0.3 s after a preparation run ends; a range that is half
+prepared while its run is still going waits (no re-uploading a growing pack); Contents offers "Upload to Drive" for
+prepared audio not in Drive yet (e.g. prepared before this feature). Rows that came from Drive are never uploaded back.
+Download: on opening a book and after every sync — automatically only on Wi‑Fi/Ethernet (`navigator.connection.type`;
+where the browser has no `type` it is allowed unless `saveData`), the chapter being read first, then onward, then
+earlier ones; "Download now" (card) and the ☁ button per chapter work on any network.
+*Same book:* book ids are the SHA-256 of the file bytes (`data/util.fileId`), so a Picker import, a cloud-list download
+and a local copy of the same file all get the same id; no extra matching needed. The sentence list matches when smart
+skip + pronunciation match, and both are synced in sync.json (`SYNCED_SETTINGS`). Every entry is checked on arrival: it is
+written only at the sentence whose text hash matches (or the nearest sentence ≤ 200 away with that exact text, for a
+slightly shifted index); anything else is skipped and simply generated live later.
+*Voice mismatch rule:* **prepared audio wins.** Audio rows now also store `textHash` (text only) and `voice`. The
+player's store returns a row when its voice-mixed `hash` matches the selected voice (normal cache, still voice-specific)
+**or** when it is a `prepared` row whose text matches (any voice; older prepared rows without `textHash` are checked
+through `audioHash('kokoro'|'piper', text)`). Played audio of the live voice never overwrites prepared audio of another
+voice. So a phone on Fast (Piper) or Auto→Piper plays the PC's Kokoro audio for prepared sentences and Piper for the
+rest. The voice is loaded lazily: `play()`/tap-to-play start without loading the voice when the sentence has stored audio,
+and the Player calls `beforeGenerate(current)` only on a cache miss — that loads the voice if it is on the device, asks
+(download sheet) if it isn't and the sentence is the one to play now, and just skips prefetches otherwise. Kokoro is
+never loaded or downloaded on the phone because a book has Kokoro audio. Word highlighting uses the stored PCM duration
+as before. Contents/the preparer count prepared rows of any voice as ready.
+*Deleting:* Settings → Storage → Delete removes the local copy only (and stops automatic re-download of that book on this
+device until "Download now"); "Remove from Drive" deletes the book's packs. "Share prepared audio through Google Drive"
+(Settings → Storage, device-local, default on) turns all of it off. Not done: deleting stale packs when a chapter's range
+changes (they stay listed in Drive until "Remove from Drive"); if two devices prepare the same chapter with different
+voices, whichever pack arrives first on a third device is kept.

@@ -79,6 +79,12 @@ export interface AudioRow {
   lastUsed: number
   /** generated ahead ("Prepare" in Contents): never evicted by the LRU */
   prepared?: 1
+  /** hash of the spoken text alone (no voice): prepared audio is played whatever voice is selected */
+  textHash?: string
+  /** voice that made it (prepared rows) */
+  voice?: string
+  /** came from a Drive pack (id of the Drive file) */
+  fromPack?: string
 }
 
 export interface SettingRow {

@@ -24,6 +24,13 @@ import { PREFETCH_VISIBLE, prefetchDepth, watchVisibility } from './visibility'
 import { SlowVoiceDetector, slowVoiceAction } from './voiceAutoSwitch'
 import { Preparer } from './preparer'
 import { hasRoomForPrepared } from './storageRoom'
+import { AudioShare } from '@/sync/audio/audioShare'
+import { packRanges } from '@/sync/audio/packRanges'
+import { autoDownloadAllowed, currentConnection, isOnline } from '@/sync/audio/network'
+import { driveConfigured, hasValidToken, isConnected } from '@/sync/drive/google'
+import { drive, onSynced } from '@/sync/syncService'
+import { useAudioShare } from '@/state/audioShare'
+import type { BookDoc } from '@/engine/book/types'
 
 export type { OpenBook } from './types'
 export { PREFETCH_HIDDEN, PREFETCH_VISIBLE } from './visibility'
@@ -41,6 +48,8 @@ class Session {
   readonly player: Player
   /** generates chapters' audio ahead of time ("Prepare" in Contents) */
   readonly preparer: Preparer
+  /** shares prepared audio with the user's other devices through Google Drive */
+  readonly share: AudioShare
   private preparedListeners = new Set<(bookId: string, index: number) => void>()
   book: OpenBook | null = null
   index: BookIndex | null = null
@@ -56,7 +65,13 @@ class Session {
     this.backend = new PriorityBackend(createBackend(), () => this.player.generating)
     // saved audio is labelled with the voice that made it, so switching voices never replays the other voice
     audioStore.voice = () => this.voice()
-    this.player = new Player({ backend: this.backend, store: audioStore, prefetch: PREFETCH_VISIBLE })
+    this.player = new Player({
+      backend: this.backend,
+      store: audioStore,
+      prefetch: PREFETCH_VISIBLE,
+      // the live voice is only loaded when a sentence has no stored audio (prepared audio never needs it)
+      beforeGenerate: (current) => this.liveVoiceNeeded(current),
+    })
     this.preparer = new Preparer({
       generate: (text) => this.backend.generateBackground(text),
       store: audioStore,
@@ -68,13 +83,22 @@ class Session {
         return rtf * this.secondsPerChar * 1000
       },
       restFactor: () => PREPARE_REST[useSettings.getState().prepareSpeed] ?? 0,
-      onSentence: (bookId, index) => this.preparedListeners.forEach((fn) => fn(bookId, index)),
+      onSentence: (bookId, index) => {
+        this.preparedListeners.forEach((fn) => fn(bookId, index))
+        if (this.shareOn()) this.share.scheduleUpload(bookId)
+      },
     })
+    this.share = this.createShare()
     let lastError: string | undefined
+    let lastJob: { bookId: string } | null = null
     this.preparer.subscribe((st) => {
       usePrepare.setState(st, true)
       if (st.error && st.error !== lastError) toast(st.error, 7000)
       lastError = st.error
+      // a preparation run ended: upload what it made right away
+      const job = st.current?.job ?? null
+      if (lastJob && job !== lastJob && this.shareOn()) this.share.scheduleUpload(lastJob.bookId, 300)
+      lastJob = job
     })
     this.applySpeed(useSettings.getState().speed)
 
@@ -132,6 +156,110 @@ class Session {
     })
   }
 
+  /** Drive connected (with a token) and "Share prepared audio" on. */
+  shareOn(): boolean {
+    return driveConfigured && isConnected() && hasValidToken() && useSettings.getState().shareAudio
+  }
+
+  private createShare(): AudioShare {
+    const share = new AudioShare({
+      drive,
+      store: audioStore,
+      enabled: () => this.shareOn(),
+      book: async (bookId) => {
+        const b = await this.bookData(bookId).catch(() => null)
+        return b && { texts: b.index.sentences.map((s) => s.spoken.text), ranges: packRanges(b.doc.toc, b.index) }
+      },
+      position: (bookId) => (this.book?.id === bookId ? this.player.index : 0),
+      preparing: (bookId, from, to) => {
+        const st = this.preparer.snapshot
+        const hit = (j: { bookId: string; from: number; to: number }) => j.bookId === bookId && j.from <= to && j.to >= from
+        return (!!st.current && hit(st.current.job)) || st.queue.some(hit)
+      },
+      autoAllowed: () => autoDownloadAllowed(),
+      online: isOnline,
+      isAutoBlocked: (bookId) => noAutoBooks().includes(bookId),
+      setAutoBlocked: (bookId, blocked) => {
+        const list = noAutoBooks().filter((b) => b !== bookId)
+        if (blocked) list.push(bookId)
+        try {
+          localStorage.setItem(NO_AUTO_KEY, JSON.stringify(list))
+        } catch {
+          // storage unavailable: the block lasts this session only
+        }
+      },
+      onSentence: (bookId, index) => this.preparedListeners.forEach((fn) => fn(bookId, index)),
+      onError: (message) => toast(message, 8000),
+    })
+    share.subscribe((st) => useAudioShare.setState(st, true))
+    // look for prepared audio of the open book after every sync, and carry on when back online / on Wi‑Fi
+    onSynced(() => this.lookForSharedAudio())
+    if (typeof window !== 'undefined') {
+      const again = () => {
+        share.resume()
+        this.lookForSharedAudio()
+      }
+      window.addEventListener('online', again)
+      currentConnection()?.addEventListener?.('change', again)
+    }
+    return share
+  }
+
+  /** Download the open book's prepared audio from Drive (automatic rules: Wi‑Fi, not deleted here). */
+  private lookForSharedAudio() {
+    if (this.book?.persist && this.shareOn()) void this.share.download(this.book.id)
+  }
+
+  /**
+   * The player is about to generate a sentence with the live voice. Load the voice if it's on the device; if it would
+   * have to be downloaded first, ask (only for the sentence to play now; prefetches just wait).
+   */
+  private async liveVoiceNeeded(current: boolean) {
+    const status = usePlayback.getState().model.status
+    if (status === 'ready' || status === 'loading' || status === 'downloading') return
+    if (isFakeVoice() || (await isVoiceInstalled(this.voice()).catch(() => false))) {
+      void this.ensureModel()
+      return
+    }
+    if (current && !usePlayback.getState().downloadPrompt) {
+      this.player.pause()
+      this.pendingStart = () => this.player.play()
+      usePlayback.setState({ downloadPrompt: this.voice() })
+    }
+    throw new CancelledError()
+  }
+
+  /** Whether sentence `i` of the open book has stored audio (prepared, or played before with this voice). */
+  private async hasStoredAudio(i: number): Promise<boolean> {
+    const s = this.index?.sentences[i]
+    if (!this.book || !s) return false
+    try {
+      return (await audioStore.lookup(this.book.id, [{ index: i, text: s.spoken.text }])).cached.has(i)
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Start playback at sentence `i`. When the voice isn't loaded yet and that sentence has stored audio, play right
+   * away without touching the voice (it is loaded later, only if a sentence without audio comes up).
+   */
+  private startAt(i: number, start: () => void, beforeAsking?: () => void) {
+    if (usePlayback.getState().model.status !== 'idle') {
+      void this.ensureModel()
+      start()
+      return
+    }
+    void this.hasStoredAudio(i).then((stored) => {
+      if (stored) start()
+      else
+        this.withDownloadConsent(() => {
+          void this.ensureModel()
+          start()
+        }, beforeAsking)
+    })
+  }
+
   /** Kokoro can't keep up on this device (reported once per engine). */
   private onVoiceTooSlow() {
     if (slowVoiceAction(getVoicePref()) === 'switch') {
@@ -160,16 +288,18 @@ class Session {
     return (this.backend as { voice?: VoiceModel }).voice ?? 'kokoro'
   }
 
+  /** A book's text and sentence index, exactly as the player reads it (same index settings). */
+  private async bookData(bookId: string): Promise<{ doc: BookDoc; index: BookIndex }> {
+    if (this.book?.id === bookId && this.index) return { doc: this.book.doc, index: this.index }
+    const doc = await getContent(bookId)
+    // the book was deleted meanwhile: nothing to do
+    if (!doc) throw new CancelledError()
+    return { doc, index: indexBook(doc, settingsSnapshot()) }
+  }
+
   /** Spoken text of every sentence of a book, exactly as the player reads it (same index settings). */
   private async sentenceTexts(bookId: string): Promise<string[]> {
-    let idx = this.book?.id === bookId ? this.index : null
-    if (!idx) {
-      const doc = await getContent(bookId)
-      // the book was deleted meanwhile: nothing to do
-      if (!doc) throw new CancelledError()
-      idx = indexBook(doc, settingsSnapshot())
-    }
-    return idx.sentences.map((s) => s.spoken.text)
+    return (await this.bookData(bookId)).index.sentences.map((s) => s.spoken.text)
   }
 
   /**
@@ -234,6 +364,7 @@ class Session {
     this.indexListeners.forEach((fn) => fn(idx))
     updateMediaPosition(this)
     void this.preloadVoice()
+    this.lookForSharedAudio()
   }
 
   /** If the voice is already on this device, load it in the background so the first play starts quickly. */
@@ -305,10 +436,7 @@ class Session {
   }
 
   play() {
-    this.withDownloadConsent(() => {
-      void this.ensureModel()
-      this.player.play()
-    })
+    this.startAt(this.player.index, () => this.player.play())
   }
 
   toggle() {
@@ -320,11 +448,9 @@ class Session {
     if (!this.index) return
     const i = typeof target === 'number' ? target : resolveStart(this.index, target)
     if (!autoplay) return this.player.seek(i, offset, autoplay)
-    this.withDownloadConsent(
-      () => {
-        void this.ensureModel()
-        this.player.seek(i, offset, true)
-      },
+    this.startAt(
+      i,
+      () => this.player.seek(i, offset, true),
       // while the download question is open, already move to the tapped spot
       () => this.player.seek(i, offset, false),
     )
@@ -381,6 +507,17 @@ class Session {
 
   clearSleep() {
     this.sleep.clear()
+  }
+}
+
+const NO_AUTO_KEY = 'lumen-audio-noauto'
+/** Books whose prepared audio the user deleted on this device (no automatic download from Drive). */
+function noAutoBooks(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(NO_AUTO_KEY) ?? '[]')
+    return Array.isArray(v) ? v : []
+  } catch {
+    return []
   }
 }
 

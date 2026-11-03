@@ -24,10 +24,13 @@ function dtypeFor(device: 'webgpu' | 'wasm'): Dtype {
   return DTYPE[device]
 }
 
-/** `?kgpu=patched` loads the WebGPU-fixed model on the GPU (testing; the stock model sounds muffled on some GPUs). */
+/**
+ * On the GPU, use the WebGPU-fixed model (the stock one sounds muffled or broken on some GPUs, e.g. AMD).
+ * `?kgpu=stock` loads the original, for comparison.
+ */
 function modelFor(device: 'webgpu' | 'wasm') {
   const want = new URLSearchParams(globalThis.location?.search ?? '').get('kgpu')
-  return device === 'webgpu' && want === 'patched' ? GPU_PATCHED_MODEL : undefined
+  return device === 'webgpu' && want !== 'stock' ? GPU_PATCHED_MODEL : undefined
 }
 
 /** This attempt can't be used (GPU slower than real time, or the engine hung); try the next one. */

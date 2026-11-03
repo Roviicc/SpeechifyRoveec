@@ -107,9 +107,8 @@ selected, hit by `caretPositionFromPoint`, or mixed into the `[data-b]` offset m
 On the user's RX 9060 XT (D3D12/WebGPU) Kokoro fp32 runs at RTF 0.087 but sounds muffled; the same text on the
 processor (WASM fp32, 10 threads, RTF 0.585) is clear. onnxruntime-web's WebGPU `ConvTranspose` is known to compute the
 vocoder's upsampling layers wrongly on AMD. `DevAmarnadhCG/Kokoro-82M-v1.0-ONNX-webgpu` rewrites those layers as
-zero-insertion + Conv (identical on CPU; its fix script is small and readable). It is loaded only with `?kgpu=patched`
-for now, pinned to commit 7d1a298 via `env.remotePathTemplate` (kokoro-js doesn't forward `revision`). If it sounds
-right it becomes the GPU default. `?kdtype=fp32` runs the processor voice at full precision for comparison.
+zero-insertion + Conv (identical on CPU; its fix script is small and readable). It is pinned to commit 7d1a298 via `env.remotePathTemplate` (kokoro-js doesn't forward `revision`). The user confirmed it sounds clear on the RX 9060 XT (RTF 0.125), so it is now the GPU
+default; `?kgpu=stock` loads the original for comparison. `?kdtype=fp32` runs the processor voice at full precision for comparison.
 **2026-11-03 — Prepare chapters (generate audio ahead) + compressed audio cache.** Contents gets "Prepare all" and a
 per-chapter Prepare button (ring while running/queued, tap to cancel; primary check when every readable sentence has
 audio for the current voice). `session/preparer.ts` is a session-level queue (one range at a time, survives leaving the

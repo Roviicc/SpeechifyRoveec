@@ -163,14 +163,15 @@ describe('Preparer', () => {
     expect(states.at(-1)!.queue).toEqual([])
   })
 
-  it('rests between sentences on lighter settings', async () => {
+  it('rests between sentences at lower GPU usage (duty cycle)', async () => {
     const full = setup({ delayMs: 20 })
     let t0 = performance.now()
     full.preparer.enqueue('b', 0, 2, 'A')
     await full.preparer.idle()
     const fullMs = performance.now() - t0
 
-    const light = setup({ delayMs: 20, deps: { restFactor: () => 1.5 } })
+    // 40%: rest 1.5 × the synthesis time after each sentence
+    const light = setup({ delayMs: 20, deps: { usage: () => 40 } })
     t0 = performance.now()
     light.preparer.enqueue('b', 0, 2, 'A')
     await light.preparer.idle()

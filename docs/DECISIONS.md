@@ -132,7 +132,7 @@ kHz: ~2.9 MB/min), so the 9.4 h book is ~100 MB. `<audio>` and `decodeAudioData`
 WAV from memory and the compression runs in the store's background write, so start latency is unchanged. Where
 `AudioEncoder`/Opus is missing (or not a secure context) the WAV is stored. **Preparing speed** (Settings → Storage,
 device-local): Full / Balanced / Light rest 0 / 0.4x / 1.5x of each sentence's synthesis time; live playback is never
-throttled. Not done: a second parallel Kokoro worker for WebGPU (it would load the model twice; left as a follow-up).
+throttled. (Replaced by "GPU usage while preparing" + Turbo workers, see below.)
 Changing smart-skip/pronunciation mid-run makes the rest of that run write rows the new index won't match (harmless, the
 row is simply regenerated when played).
 
@@ -175,3 +175,41 @@ device until "Download now"); "Remove from Drive" deletes the book's packs. "Sha
 (Settings → Storage, device-local, default on) turns all of it off. Not done: deleting stale packs when a chapter's range
 changes (they stay listed in Drive until "Remove from Drive"); if two devices prepare the same chapter with different
 voices, whichever pack arrives first on a third device is kept.
+
+## Preparing: GPU usage duty cycle and Turbo workers; Natural voice always on the GPU
+
+*Why:* on the PC (RX 9060 XT, Kokoro fp32 on WebGPU, RTF ≈ 0.125) the GPU peaked at ~60% while preparing a whole book:
+sentences ran strictly one at a time and the GPU idled during each sentence's CPU work (phonemizing, reading the audio
+back, Opus encoding, the IndexedDB write). The user wants to see it at ~90–100% like a game, and to pick how hard it works.
+
+*GPU usage while preparing* (Settings → Storage, slider 20–100 % in steps of 10, default 100, device-local): a duty
+cycle. After each background sentence a lane rests `genMs × (100/usage − 1)` (`session/dutyCycle.restAfter`), `genMs`
+being the worker's pure synthesis time; 50% works half the time, 20% a fifth. Replaces Full/Balanced/Light; persisted
+settings v1 → v2 migrate full → 100, balanced → 70, light → 40 (`state/settings.migrateSettings`).
+
+*Turbo* (Off / ×2 / ×3, default Off, device-local): extra Kokoro workers used only by the preparer
+(`engine/voice/backgroundLanes.ts`). The Preparer runs N lanes over a shared list of pending sentences, so N sentences
+are in flight; lane 0 is the main voice's background lane as before, lanes 1–2 each own a separate `KokoroBackend({ only:
+'webgpu' })` (same device / fp32 / WebGPU-fixed model, `?kgpu=` honoured; the model files come from the browser cache so
+a worker loads in seconds). Every lane waits for `PriorityBackend.waitForPlayer()` before each sentence, so live playback
+keeps priority (it waits at most for the sentences already in the GPU). Workers start lazily on their first sentence and
+are disposed (worker terminated → its GPU memory is freed) when the queue empties, when Turbo is turned down (mid-run:
+extra lanes stop after their sentence) and on a voice switch. Only allowed when the main voice is Kokoro running on WebGPU
+(`select.turboAllowed`); the control is hidden when the device has no WebGPU adapter, the voice is Piper, or the Natural
+voice fell back to the processor — a second CPU worker would only fight for the same cores. If an extra worker fails to
+load or crashes (e.g. GPU out of memory), its sentence goes back to the list, the cap drops to the workers that worked
+and a small note says "preparing with N"; the run itself never fails because of it. Live stats under the slider while
+preparing: "×N real time · S sentences/min · T left · W workers", measured over the last minute of wall time (rests and
+parallel lanes included, `Throughput`), which also drives the time left.
+
+*Natural voice engine: GPU only.* The Auto / GPU / Processor choice is gone from Settings → Voice. The chain is GPU (when
+there is a WebGPU adapter) → threaded processor → single-thread processor, moving on only when an attempt fails or stalls
+(`EngineUnusable`); the GPU is no longer speed-tested and a slow GPU stays on the GPU (the user explicitly wants the GPU;
+phones use the Fast voice anyway). Stored `lumen-voice-engine` / `lumen-voice-auto` prefs are removed on start
+(`migrateEnginePrefs`). When the Natural voice is selected and there is no adapter or it fell back, Settings shows "This
+device has no usable GPU — using the processor". `?kdtype=` and `?kgpu=` still work. The Auto/Natural/Fast *voice*
+choice (Kokoro vs Piper) is unchanged.
+
+*To verify on the PC:* GPU utilisation and ×real time with Turbo Off / ×2 / ×3 (expect the gain to flatten once the
+GPU is saturated), GPU memory (each worker holds its own copy of the fp32 model, roughly +0.3–0.5 GB), that memory
+drops back after the queue ends, and that playback started during a Turbo run stays smooth.

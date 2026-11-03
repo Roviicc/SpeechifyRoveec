@@ -1,5 +1,6 @@
 import { Player, type SeekOffset } from '@/engine/voice/player/player'
-import { createBackend, isFakeVoice } from '@/engine/voice/select'
+import { createBackend, createPrepareWorker, isFakeVoice, turboAllowed } from '@/engine/voice/select'
+import { BackgroundLanes } from '@/engine/voice/backgroundLanes'
 import { isVoiceInstalled } from '@/engine/voice/install'
 import { CancelledError, type VoiceModel } from '@/engine/voice/types'
 import { PriorityBackend } from '@/engine/voice/priorityBackend'
@@ -9,7 +10,7 @@ import { audioStore } from '@/data/audioCache'
 import { getContent, saveProgress } from '@/data/repo'
 import type { Locator } from '@/data/db'
 import { toast } from '@/ui/toast'
-import { PREPARE_REST, settingsSnapshot, useSettings } from '@/state/settings'
+import { settingsSnapshot, useSettings } from '@/state/settings'
 import { usePlayback } from '@/state/playback'
 import { usePrepare } from '@/state/prepare'
 import { setupMediaSession, updateMediaPosition } from './mediaSession'
@@ -48,6 +49,8 @@ class Session {
   readonly player: Player
   /** generates chapters' audio ahead of time ("Prepare" in Contents) */
   readonly preparer: Preparer
+  /** extra voice workers used only by the preparer ("Turbo", GPU only) */
+  readonly lanes: BackgroundLanes
   /** shares prepared audio with the user's other devices through Google Drive */
   readonly share: AudioShare
   private preparedListeners = new Set<(bookId: string, index: number) => void>()
@@ -72,8 +75,19 @@ class Session {
       // the live voice is only loaded when a sentence has no stored audio (prepared audio never needs it)
       beforeGenerate: (current) => this.liveVoiceNeeded(current),
     })
+    this.lanes = new BackgroundLanes({
+      create: () => createPrepareWorker(this.backend.info, this.voice()),
+      waitForPlayer: () => this.backend.waitForPlayer(),
+      onFailed: (_lane, workers) =>
+        this.preparer.setNote(
+          workers > 1
+            ? `The GPU could not start another voice worker — preparing with ${workers}.`
+            : 'The GPU could not start another voice worker — preparing with one.',
+        ),
+    })
     this.preparer = new Preparer({
-      generate: (text) => this.backend.generateBackground(text),
+      generate: (text, lane) => (lane === 0 ? this.backend.generateBackground(text) : this.lanes.generate(lane, text)),
+      lanes: () => this.prepareLanes(),
       store: audioStore,
       voice: () => this.voice(),
       sentences: (bookId) => this.sentenceTexts(bookId),
@@ -82,7 +96,7 @@ class Session {
         const rtf = this.player.rtf ?? this.backend.info?.testRtf ?? 1
         return rtf * this.secondsPerChar * 1000
       },
-      restFactor: () => PREPARE_REST[useSettings.getState().prepareSpeed] ?? 0,
+      usage: () => useSettings.getState().prepareUsage,
       onSentence: (bookId, index) => {
         this.preparedListeners.forEach((fn) => fn(bookId, index))
         if (this.shareOn()) this.share.scheduleUpload(bookId)
@@ -95,12 +109,21 @@ class Session {
       usePrepare.setState(st, true)
       if (st.error && st.error !== lastError) toast(st.error, 7000)
       lastError = st.error
+      // nothing left to prepare: free the extra workers' memory
+      if (!st.current && !st.queue.length) this.lanes.dispose()
       // a preparation run ended: upload what it made right away
       const job = st.current?.job ?? null
       if (lastJob && job !== lastJob && this.shareOn()) this.share.scheduleUpload(lastJob.bookId, 300)
       lastJob = job
     })
     this.applySpeed(useSettings.getState().speed)
+    // Turbo turned down: stop the extra workers that are no longer wanted
+    useSettings.subscribe((st, prev) => {
+      if (st.prepareWorkers !== prev.prepareWorkers) {
+        this.lanes.trim(this.prepareLanes())
+        if (st.prepareWorkers <= 1) this.preparer.setNote(undefined)
+      }
+    })
 
     this.sleep = new SleepTimer({
       fadeOut: (ms) => void this.player.fadeOutAndPause(ms),
@@ -154,6 +177,12 @@ class Session {
       usePlayback.setState({ rtf })
       if (this.slowVoice.observe(rtf, p.speed, this.voice())) this.onVoiceTooSlow()
     })
+  }
+
+  /** Voice workers the preparer should use: the Turbo setting, only on the GPU, capped after worker failures. */
+  private prepareLanes(): number {
+    if (!turboAllowed(this.backend.info, this.voice())) return 1
+    return Math.max(1, Math.min(useSettings.getState().prepareWorkers, this.lanes.limit))
   }
 
   /** Drive connected (with a token) and "Share prepared audio" on. */
@@ -320,10 +349,13 @@ class Session {
     return () => this.preparedListeners.delete(fn)
   }
 
-  /** Switch the voice engine (Auto / GPU / Processor): unload the model; it reloads on the next play. */
+  /** Switch the voice (Auto / Natural / Fast): unload the model; it reloads on the next play. */
   switchEngine() {
     const wasActive = this.player.isActive
     this.player.pause()
+    this.lanes.dispose()
+    this.lanes.resetLimit()
+    this.preparer.setNote(undefined)
     this.backend.reset?.()
     this.player.dropAudio()
     this.player.resetRtf()

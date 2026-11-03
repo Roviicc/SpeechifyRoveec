@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Check, ChevronRight, Download, Sparkles, Trash2, Wand2, Zap } from 'lucide-react'
 import { usePlayback } from '@/state/playback'
-import { ProgressRing, Segmented } from '@/ui/controls'
+import { ProgressRing } from '@/ui/controls'
 import { toast } from '@/ui/toast'
-import { getAutoVoice, getEnginePref, getVoicePref, setAutoVoice, setEnginePref, setVoicePref, effectiveVoice, type EnginePref, type VoicePref } from '@/engine/voice/choice/engineChoice'
+import { getAutoVoice, getVoicePref, setAutoVoice, setVoicePref, effectiveVoice, type VoicePref } from '@/engine/voice/choice/engineChoice'
 import { formatBytes, freeBytes, removeVoice, voiceStorage, type VoiceStorage } from '@/engine/voice/install'
 import type { VoiceModel } from '@/engine/voice/types'
 import { session } from '@/session/session'
 import { navigate } from '@/app/router'
 import { VOICES } from '@/features/voice/voiceInfo'
 import { Group } from './Group'
+import { naturalOnGpu, useHasGpu } from './gpuStatus'
 
 const Ring = ({ fraction }: { fraction: number | null }) => <ProgressRing fraction={fraction} />
 
@@ -32,7 +33,8 @@ function Row({ selected, icon, title, subtitle, trailing, onSelect, testId }: { 
 export function VoiceSection() {
   const model = usePlayback((s) => s.model)
   const [pref, setPrefState] = useState<VoicePref>(getVoicePref())
-  const [engine, setEngine] = useState<EnginePref>(getEnginePref())
+  const engineDevice = usePlayback((s) => s.engineDevice)
+  const hasGpu = useHasGpu()
   const [stored, setStored] = useState<VoiceStorage | null>(null)
   const [free, setFree] = useState<number | null>(null)
   const auto = getAutoVoice()
@@ -123,27 +125,10 @@ export function VoiceSection() {
         {onDevice ? `Voices on this device: ${formatBytes(onDevice)}` : 'No voice downloaded yet — it downloads once, then works offline'}
         {free !== null ? ` · ${formatBytes(free)} free` : ''}
       </p>
-      {current === 'kokoro' && (
-        <details className="border-t border-line py-3">
-          <summary className="cursor-pointer text-[15px]">Natural voice: run on GPU or processor</summary>
-          <div className="pt-2">
-            <Segmented<EnginePref>
-              label="Voice engine"
-              value={engine}
-              onChange={(e) => {
-                setEngine(e)
-                setEnginePref(e)
-                session().switchEngine()
-              }}
-              options={[
-                { value: 'auto', label: 'Auto' },
-                { value: 'gpu', label: 'GPU' },
-                { value: 'cpu', label: 'Processor' },
-              ]}
-            />
-            <p className="mt-1.5 text-sm text-muted">Auto tests your GPU once and uses the processor if the GPU is too slow. If playback stutters or the phone lags, try Processor.</p>
-          </div>
-        </details>
+      {current === 'kokoro' && hasGpu !== null && !naturalOnGpu(hasGpu, engineDevice) && (
+        <p className="-mt-2 pb-3 text-xs text-muted" data-testid="voice-gpu-note">
+          This device has no usable GPU — using the processor
+        </p>
       )}
       <button className="flex min-h-12 w-full items-center border-t border-line text-left text-[15px]" onClick={() => navigate({ name: 'tts' })} data-testid="open-tts-test">
         <span className="flex-1">Voice test page</span>

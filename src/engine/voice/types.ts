@@ -9,8 +9,8 @@ export interface TtsInfo {
   threads?: number
   /** real-time factor of the start-up speed test (generation time / audio length) */
   testRtf?: number
-  /** set when the GPU was tried and rejected as too slow */
-  gpuRejected?: { rtf: number | null }
+  /** set when the GPU was tried but failed or stalled, so the voice fell back to the processor */
+  gpuFailed?: boolean
   voice?: VoiceModel
   /** Auto mode chose Piper because Kokoro's speed test was too slow (null = Kokoro failed to start) */
   autoSwitched?: { kokoroRtf: number | null }

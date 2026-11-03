@@ -2,10 +2,10 @@ import type { TtsBackend, TtsInfo, VoiceModel } from '@/engine/voice/types'
 import { isVoiceInstalled } from '@/engine/voice/install'
 import { IDLE_MODEL, usePlayback } from '@/state/playback'
 
-/** Short device description for Settings / the debug overlay, e.g. "wasm / q8 (GPU too slow: RTF 3.2)". */
+/** Short device description for Settings / the debug overlay, e.g. "wasm / q8 (GPU failed)". */
 export function deviceLabel(info: TtsInfo): string {
   const auto = info.autoSwitched ? 'auto→piper · ' : ''
-  const gpu = info.gpuRejected ? ` (GPU too slow${info.gpuRejected.rtf ? `: RTF ${info.gpuRejected.rtf.toFixed(1)}` : ''})` : ''
+  const gpu = info.gpuFailed ? ' (GPU failed)' : ''
   return `${auto}${info.device} / ${info.dtype}${gpu}`
 }
 
@@ -46,6 +46,7 @@ export function ensureModel(backend: TtsBackend): Promise<void> {
     .then((info) => {
       usePlayback.setState({
         device: deviceLabel(info),
+        engineDevice: info.device,
         isolated: info.isolated,
         threads: info.threads,
         model: { ...usePlayback.getState().model, status: 'ready', voice: currentVoice(backend) },
@@ -59,5 +60,5 @@ export function ensureModel(backend: TtsBackend): Promise<void> {
 
 /** Forget the loaded model in the store (after switching the voice engine). */
 export function resetModelState() {
-  usePlayback.setState({ device: undefined, rtf: undefined, model: { ...IDLE_MODEL } })
+  usePlayback.setState({ device: undefined, engineDevice: undefined, rtf: undefined, model: { ...IDLE_MODEL } })
 }

@@ -2,9 +2,13 @@ import { useCallback, useEffect, useState } from 'react'
 import { audioStore, type PreparedUsage } from '@/data/audioCache'
 import { db } from '@/data/db'
 import { session } from '@/session/session'
-import { useSettings, type PrepareSpeed } from '@/state/settings'
+import { PREPARE_USAGE_MAX, PREPARE_USAGE_MIN, useSettings, type PrepareWorkers } from '@/state/settings'
 import { usePrepare } from '@/state/prepare'
-import { Segmented, Toggle } from '@/ui/controls'
+import { usePlayback } from '@/state/playback'
+import { effectiveVoice } from '@/engine/voice/choice/engineChoice'
+import { formatRealtime } from '@/session/dutyCycle'
+import { Segmented, Slider, Toggle, formatMinutes } from '@/ui/controls'
+import { showTurbo, useHasGpu } from './gpuStatus'
 import { useAudioShare } from '@/state/audioShare'
 import { driveConfigured, isConnected } from '@/sync/drive/google'
 import { useSync } from '@/sync/syncService'
@@ -28,7 +32,6 @@ export function StorageSection() {
   const [cacheSize, setCacheSize] = useState<number | null>(null)
   const [prepared, setPrepared] = useState<PreparedBook[] | null>(null)
   const [free, setFree] = useState<number | null>(null)
-  const prepareSpeed = useSettings((s) => s.prepareSpeed)
   const setSettings = useSettings((s) => s.set)
   const shareAudio = useSettings((s) => s.shareAudio)
   // refresh the list when a preparation run or a Drive transfer ends
@@ -149,20 +152,79 @@ export function StorageSection() {
           />
         </div>
       )}
-      <div className="py-3">
-        <span className="mb-1 block text-[15px]">Preparing speed</span>
-        <span className="mb-2 block text-sm text-muted">Lighter settings rest between sentences: cooler and quieter, but slower. Playback is never slowed.</span>
-        <Segmented<PrepareSpeed>
-          label="Preparing speed"
-          value={prepareSpeed}
-          onChange={(v) => setSettings({ prepareSpeed: v })}
-          options={[
-            { value: 'full', label: 'Full' },
-            { value: 'balanced', label: 'Balanced' },
-            { value: 'light', label: 'Light' },
-          ]}
-        />
-      </div>
+      <PreparingControls />
     </Group>
+  )
+}
+
+/** Settings → Storage: how hard preparing works the GPU (duty cycle), Turbo workers, and the measured speed. */
+function PreparingControls() {
+  const usage = useSettings((s) => s.prepareUsage)
+  const workers = useSettings((s) => s.prepareWorkers)
+  const setSettings = useSettings((s) => s.set)
+  const current = usePrepare((s) => s.current)
+  const note = usePrepare((s) => s.note)
+  const engineDevice = usePlayback((s) => s.engineDevice)
+  const voice = usePlayback((s) => s.model.voice) ?? effectiveVoice()
+  const hasGpu = useHasGpu()
+  const turbo = !!hasGpu && showTurbo(hasGpu, voice, engineDevice)
+  const stats = current?.stats
+  return (
+    <div className="py-3" data-testid="preparing-controls">
+      <div className="mb-1 flex items-baseline gap-3">
+        <span className="flex-1 text-[15px]" id="prepare-usage-label">
+          GPU usage while preparing
+        </span>
+        <span className="text-[15px] font-semibold tabular-nums" data-testid="prepare-usage-value">
+          {usage}%
+        </span>
+      </div>
+      <span className="mb-2 block text-sm text-muted">Lower values rest between sentences: cooler and quieter, but slower. Playback is never slowed.</span>
+      <Slider
+        label="GPU usage while preparing"
+        min={PREPARE_USAGE_MIN}
+        max={PREPARE_USAGE_MAX}
+        step={10}
+        value={usage}
+        format={(v) => `${v}%`}
+        onChange={(v) => setSettings({ prepareUsage: v })}
+        testId="prepare-usage"
+      />
+      {turbo && (
+        <div className="mt-4" data-testid="prepare-turbo">
+          <span className="mb-1 block text-[15px]">Turbo</span>
+          <span className="mb-2 block text-sm text-muted">Extra voice workers on the GPU prepare several sentences at once. Each one uses more GPU memory.</span>
+          <Segmented<'1' | '2' | '3'>
+            label="Turbo voice workers"
+            value={String(workers) as '1' | '2' | '3'}
+            onChange={(v) => setSettings({ prepareWorkers: Number(v) as PrepareWorkers })}
+            options={[
+              { value: '1', label: 'Off' },
+              { value: '2', label: '×2' },
+              { value: '3', label: '×3' },
+            ]}
+          />
+        </div>
+      )}
+      {current && (
+        <p className="mt-3 text-sm text-muted tabular-nums" data-testid="prepare-stats" aria-live="polite">
+          {stats ? (
+            <>
+              <span className="font-semibold text-fg">{formatRealtime(stats.xRealtime)}</span>
+              {` · ${stats.perMin.toFixed(stats.perMin >= 100 ? 0 : 1)} sentences/min`}
+              {current.etaSec !== null ? ` · ${formatMinutes(current.etaSec)} left` : ''}
+              {(current.workers ?? 1) > 1 ? ` · ${current.workers} workers` : ''}
+            </>
+          ) : (
+            'Measuring speed…'
+          )}
+        </p>
+      )}
+      {note && (
+        <p className="mt-2 text-xs text-muted" data-testid="prepare-note">
+          {note}
+        </p>
+      )}
+    </div>
   )
 }

@@ -1,44 +1,28 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { chooseDevice, getAutoResult, getEnginePref, setAutoResult, setEnginePref } from '@/engine/voice/choice/engineChoice'
+import { attemptChain, migrateEnginePrefs } from '@/engine/voice/choice/engineChoice'
 
-describe('voice engine choice', () => {
+describe('Natural voice engine: GPU first, processor only as fallback', () => {
   beforeEach(() => localStorage.clear())
 
-  it('auto tests the GPU the first time, then uses the remembered result', () => {
-    expect(chooseDevice('auto', true, null)).toEqual({ device: 'webgpu', test: true })
-    setAutoResult({ device: 'wasm', gpuRtf: 4.2, at: 1 })
-    expect(chooseDevice('auto', true, getAutoResult())).toEqual({ device: 'wasm', test: false })
+  it('tries the GPU (no speed test) then threaded and single-thread processor', () => {
+    expect(attemptChain(true, false)).toEqual([{ device: 'webgpu' }, { device: 'wasm' }, { device: 'wasm', threads: 1 }])
+    expect(attemptChain(true, true)).toEqual([{ device: 'webgpu' }, { device: 'wasm', threads: 1 }])
   })
 
-  it('respects manual choices and missing GPUs', () => {
-    expect(chooseDevice('cpu', true, null)).toEqual({ device: 'wasm', test: false })
-    expect(chooseDevice('gpu', true, { device: 'wasm', gpuRtf: 3, at: 1 })).toEqual({ device: 'webgpu', test: false })
-    expect(chooseDevice('gpu', false, null)).toEqual({ device: 'wasm', test: false })
-    expect(chooseDevice('auto', false, null)).toEqual({ device: 'wasm', test: false })
+  it('goes straight to the processor when the device has no WebGPU adapter', () => {
+    expect(attemptChain(false, false)).toEqual([{ device: 'wasm' }, { device: 'wasm', threads: 1 }])
+    expect(attemptChain(false, true)).toEqual([{ device: 'wasm', threads: 1 }])
   })
 
-  it('switching back to auto forgets the old test result', () => {
-    setAutoResult({ device: 'wasm', gpuRtf: 3, at: 1 })
-    setEnginePref('cpu')
-    expect(getEnginePref()).toBe('cpu')
-    setEnginePref('auto')
-    expect(getEnginePref()).toBe('auto')
-    expect(getAutoResult()).toBeNull()
-  })
-})
-
-describe('engine attempt chain', () => {
-  it('auto: GPU (speed-tested) then threaded processor then single-thread processor', async () => {
-    const { attemptChain } = await import('@/engine/voice/choice/engineChoice')
-    expect(attemptChain('auto', true, null, false)).toEqual([
-      { device: 'webgpu', speedTest: true },
-      { device: 'wasm', speedTest: false },
-      { device: 'wasm', threads: 1, speedTest: false },
-    ])
-    expect(attemptChain('cpu', true, null, false).map((a) => a.threads)).toEqual([undefined, 1])
-    expect(attemptChain('cpu', true, null, true)).toEqual([{ device: 'wasm', threads: 1, speedTest: false }])
-    expect(attemptChain('gpu', true, null, false)).toEqual([{ device: 'webgpu', speedTest: false }])
-    expect(attemptChain('auto', true, { device: 'wasm', gpuRtf: 3, at: 1 }, false)[0].device).toBe('wasm')
+  it("migrates the old Auto / Processor engine choice to the GPU (the stored prefs are removed)", () => {
+    localStorage.setItem('lumen-voice-engine', 'cpu')
+    localStorage.setItem('lumen-voice-auto', JSON.stringify({ device: 'wasm', gpuRtf: 3, at: 1 }))
+    localStorage.setItem('lumen-voice-single-thread', '1')
+    migrateEnginePrefs()
+    expect(localStorage.getItem('lumen-voice-engine')).toBeNull()
+    expect(localStorage.getItem('lumen-voice-auto')).toBeNull()
+    // unrelated: the processor's single-thread memory stays
+    expect(localStorage.getItem('lumen-voice-single-thread')).toBe('1')
   })
 })
 

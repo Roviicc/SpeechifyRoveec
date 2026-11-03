@@ -79,7 +79,8 @@ export class PriorityBackend implements TtsBackend {
     w.forEach((f) => f())
   }
 
-  private async idle(): Promise<void> {
+  /** Resolves when no player work is running or pending (background lanes wait for this before each sentence). */
+  async waitForPlayer(): Promise<void> {
     for (;;) {
       while (this.playerBusy) {
         await new Promise<void>((r) => {
@@ -97,7 +98,7 @@ export class PriorityBackend implements TtsBackend {
   /** Low-priority generation (one at a time, after the player's requests). */
   generateBackground(text: string): Promise<GeneratedAudio> {
     const run = this.bgChain.then(async () => {
-      await this.idle()
+      await this.waitForPlayer()
       return this.inner.generate(text, BACKGROUND_EPOCH)
     })
     this.bgChain = run.catch(() => {})

@@ -204,10 +204,8 @@ describe('progress saver', () => {
 describe('small helpers', () => {
   it('device label', () => {
     expect(deviceLabel({ device: 'wasm', dtype: 'q8' })).toBe('wasm / q8')
-    expect(deviceLabel({ device: 'wasm', dtype: 'q8', gpuRejected: { rtf: 3.21 }, autoSwitched: { kokoroRtf: 2 } })).toBe(
-      'auto→piper · wasm / q8 (GPU too slow: RTF 3.2)',
-    )
-    expect(deviceLabel({ device: 'wasm', dtype: 'q8', gpuRejected: { rtf: null } })).toBe('wasm / q8 (GPU too slow)')
+    expect(deviceLabel({ device: 'wasm', dtype: 'q8', gpuFailed: true, autoSwitched: { kokoroRtf: 2 } })).toBe('auto→piper · wasm / q8 (GPU failed)')
+    expect(deviceLabel({ device: 'wasm', dtype: 'q8', gpuFailed: true })).toBe('wasm / q8 (GPU failed)')
   })
 
   it('index key changes with smart skip and pronunciation only', () => {

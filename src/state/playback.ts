@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { PlayerState } from '@/engine/voice/player/player'
-import type { VoiceModel } from '@/engine/voice/types'
+import type { TtsDevice, VoiceModel } from '@/engine/voice/types'
 
 export interface ModelStatus {
   status: 'idle' | 'downloading' | 'loading' | 'ready' | 'error'
@@ -33,6 +33,8 @@ export interface PlaybackState {
   speed: number
   model: ModelStatus
   device?: string
+  /** what the loaded voice runs on (webgpu / wasm / fake) */
+  engineDevice?: TtsDevice
   /** worker is cross-origin isolated (WASM threads possible) */
   isolated?: boolean
   /** WASM threads used by the voice */

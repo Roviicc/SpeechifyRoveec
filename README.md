@@ -174,7 +174,7 @@ src/
       kokoro/       Kokoro backend + worker (GPU -> CPU fallback chain)
       piper/        Piper backend + worker
       shared/       worker client/server base + message protocol
-      choice/       Auto/Natural/Fast + GPU/Processor preferences, limits
+      choice/       Auto/Natural/Fast voice preference, GPU→processor fallback chain, limits
   data/             Dexie DB, repositories, audio cache
   sync/             merge + sync service (Drive appDataFolder)
     drive/          Drive client, FakeDrive, Google sign-in + Picker bridge

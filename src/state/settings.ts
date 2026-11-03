@@ -6,6 +6,10 @@ import { DEFAULT_SKIP, type PronunciationEntry, type SkipOptions } from '@/engin
 export type Theme = 'light' | 'sepia' | 'dark' | 'system'
 export type FontFamily = 'serif' | 'sans' | 'dyslexic'
 export type Margin = 'narrow' | 'normal' | 'wide'
+export type PrepareSpeed = 'full' | 'balanced' | 'light'
+
+/** Rest after each prepared sentence, as a multiple of the time it took to generate. */
+export const PREPARE_REST: Record<PrepareSpeed, number> = { full: 0, balanced: 0.4, light: 1.5 }
 
 export interface Settings {
   /** where "Look up" sends a selected word (device-specific, not synced) */
@@ -28,6 +32,8 @@ export interface Settings {
   snapPages: boolean
   /** PDF Original: invert the rendered pages while the app theme is dark */
   darkPages: boolean
+  /** how hard "Prepare" works the device: full speed, or resting between sentences (cooler, quieter, less battery) */
+  prepareSpeed: PrepareSpeed
   /** ms timestamp of the last change to any synced field */
   updatedAt: number
 }
@@ -49,11 +55,12 @@ export const DEFAULT_SETTINGS: Settings = {
   pdfMode: 'original',
   snapPages: false,
   darkPages: true,
+  prepareSpeed: 'full',
   updatedAt: 0,
 }
 
 /** Settings that stay on this device (not part of sync.json). */
-const LOCAL_ONLY = new Set<string>(['pdfMode'])
+const LOCAL_ONLY = new Set<string>(['pdfMode', 'prepareSpeed'])
 
 interface SettingsStore extends Settings {
   set: (patch: Partial<Settings>) => void

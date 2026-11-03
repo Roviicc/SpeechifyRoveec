@@ -110,3 +110,29 @@ vocoder's upsampling layers wrongly on AMD. `DevAmarnadhCG/Kokoro-82M-v1.0-ONNX-
 zero-insertion + Conv (identical on CPU; its fix script is small and readable). It is loaded only with `?kgpu=patched`
 for now, pinned to commit 7d1a298 via `env.remotePathTemplate` (kokoro-js doesn't forward `revision`). If it sounds
 right it becomes the GPU default. `?kdtype=fp32` runs the processor voice at full precision for comparison.
+**2026-11-03 — Prepare chapters (generate audio ahead) + compressed audio cache.** Contents gets "Prepare all" and a
+per-chapter Prepare button (ring while running/queued, tap to cancel; primary check when every readable sentence has
+audio for the current voice). `session/preparer.ts` is a session-level queue (one range at a time, survives leaving the
+reader, Library rows say "Preparing 34%", the where-bar shows a small ring). It writes into the *same* cache rows the
+player reads: key `audioKey(bookId, sentenceIndex)` = `bookId:index`, row `hash` = `audioHash(voice, spokenText)`
+(both exported from `data/audioCache.ts`; together they identify a sentence's audio, e.g. for a later Drive export).
+Smart-skipped text is never a sentence, so it is never generated. **Priority:** the session's backend is a
+`PriorityBackend`; the player calls `generate()` as before, the preparer `generateBackground()`, which runs one sentence
+at a time and only when no player request is in flight or pending (`player.generating`, which also covers the cache read
+before a generate), so playback waits at most for the one background sentence already in the engine. Background
+requests use epoch `Number.MAX_SAFE_INTEGER`, so a seek's `cancel(epoch)` never drops them. **Eviction:** prepared rows carry
+`prepared: 1`; the 500 MB LRU skips (and doesn't count) them, a later player write of the same sentence keeps the mark,
+"Clear audio cache" keeps them; they go with the book or via Settings → Storage → Prepared audio → Delete. Before every
+20 sentences the preparer checks a 4 GB own cap and `navigator.storage.estimate()` (>= 200 MB free, < 95% used) and
+stops with "Storage is full" (also on QuotaExceededError); `navigator.storage.persist()` is requested on the first
+Prepare. **Compression:** all cached audio (played and prepared) is stored as Ogg Opus, 24 kbit/s mono, encoded with
+WebCodecs `AudioEncoder` and our own small Ogg muxer (`engine/voice/player/ogg.ts`, pre-skip from the encoder's
+OpusHead, last granule trims the end padding to the exact PCM length). Measured in Chromium: 0.176 MB per minute (WAV 24
+kHz: ~2.9 MB/min), so the 9.4 h book is ~100 MB. `<audio>` and `decodeAudioData` both play it with the exact duration
+(e2e). The duration stored with the row is the original PCM duration (word timing). The player keeps playing the fresh
+WAV from memory and the compression runs in the store's background write, so start latency is unchanged. Where
+`AudioEncoder`/Opus is missing (or not a secure context) the WAV is stored. **Preparing speed** (Settings → Storage,
+device-local): Full / Balanced / Light rest 0 / 0.4x / 1.5x of each sentence's synthesis time; live playback is never
+throttled. Not done: a second parallel Kokoro worker for WebGPU (it would load the model twice; left as a follow-up).
+Changing smart-skip/pronunciation mid-run makes the rest of that run write rows the new index won't match (harmless, the
+row is simply regenerated when played).

@@ -2,6 +2,7 @@ import { MoreHorizontal } from 'lucide-react'
 import { navigate } from '@/app/router'
 import type { BookRow, ProgressRow } from '@/data/db'
 import { IconButton, Thumb } from '@/ui/controls'
+import { usePrepare } from '@/state/prepare'
 
 function relativeDay(ts: number): string {
   const d = new Date(ts)
@@ -15,7 +16,16 @@ function relativeDay(ts: number): string {
 }
 
 /** A library row: thumbnail, title, "12% • Today • pdf" and the "•••" options button. */
+/** " • Preparing 34%" / " • Audio queued" while this book's audio is being generated ahead. */
+function usePrepareNote(bookId: string): string {
+  return usePrepare((s) => {
+    if (s.current?.job.bookId === bookId) return ` • Preparing ${s.current.total ? Math.round((s.current.done / s.current.total) * 100) : 0}%`
+    return s.queue.some((j) => j.bookId === bookId) ? ' • Audio queued' : ''
+  })
+}
+
 export function BookListRow({ book, progress, onMenu }: { book: BookRow; progress: ProgressRow | undefined; onMenu: () => void }) {
+  const prepareNote = usePrepareNote(book.id)
   return (
     <li className="flex items-center gap-3 rounded-[16px] hover:bg-surface" data-testid="book-row">
       <button className="flex min-w-0 flex-1 items-center gap-3 py-3 pl-2 text-left" onClick={() => navigate({ name: 'reader', bookId: book.id })} data-testid="book-open">
@@ -26,6 +36,7 @@ export function BookListRow({ book, progress, onMenu }: { book: BookRow; progres
           </span>
           <span className="mt-0.5 block truncate text-sm text-muted" data-testid="book-meta">
             {Math.round((progress?.percent ?? 0) * 100)}% • {relativeDay(book.lastOpenedAt)} • {book.type}
+            {prepareNote}
           </span>
         </span>
       </button>

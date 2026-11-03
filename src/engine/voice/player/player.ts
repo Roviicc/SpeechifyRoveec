@@ -154,6 +154,11 @@ export class Player {
     return this.rtfSamples.reduce((a, b) => a + b, 0) / this.rtfSamples.length
   }
 
+  /** Audio for some sentence is being looked up or generated right now. */
+  get generating(): boolean {
+    return this.pending.size > 0
+  }
+
   /** How many sentences ahead to generate. */
   get prefetchAhead(): number {
     return this.prefetchDepth

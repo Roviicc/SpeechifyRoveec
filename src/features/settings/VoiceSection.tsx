@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Check, ChevronRight, Download, Sparkles, Trash2, Wand2, Zap } from 'lucide-react'
 import { usePlayback } from '@/state/playback'
-import { Segmented } from '@/ui/controls'
+import { ProgressRing, Segmented } from '@/ui/controls'
 import { toast } from '@/ui/toast'
 import { getAutoVoice, getEnginePref, getVoicePref, setAutoVoice, setEnginePref, setVoicePref, effectiveVoice, type EnginePref, type VoicePref } from '@/engine/voice/choice/engineChoice'
 import { formatBytes, freeBytes, removeVoice, voiceStorage, type VoiceStorage } from '@/engine/voice/install'
@@ -11,16 +11,7 @@ import { navigate } from '@/app/router'
 import { VOICES } from '@/features/voice/voiceInfo'
 import { Group } from './Group'
 
-function Ring({ fraction }: { fraction: number | null }) {
-  const r = 9
-  const c = 2 * Math.PI * r
-  return (
-    <svg width="28" height="28" viewBox="0 0 24 24" className={fraction === null ? 'animate-spin' : ''} aria-hidden>
-      <circle cx="12" cy="12" r={r} fill="none" stroke="var(--surface-2)" strokeWidth="3" />
-      <circle cx="12" cy="12" r={r} fill="none" stroke="var(--primary)" strokeWidth="3" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - (fraction ?? 0.25))} transform="rotate(-90 12 12)" />
-    </svg>
-  )
-}
+const Ring = ({ fraction }: { fraction: number | null }) => <ProgressRing fraction={fraction} />
 
 function Row({ selected, icon, title, subtitle, trailing, onSelect, testId }: { selected: boolean; icon: ReactNode; title: ReactNode; subtitle: ReactNode; trailing?: ReactNode; onSelect: () => void; testId: string }) {
   return (

@@ -26,7 +26,9 @@ function configureWasmThreads(requested?: number): number {
 serveVoice({
   async load(msg, progress) {
     const threads = configureWasmThreads(msg.threads)
-    const tts = await KokoroTTS.from_pretrained(MODEL_ID, {
+    // kokoro-js doesn't pass a revision through, so pin it via the download path (this worker loads one model)
+    if (msg.model) env.remotePathTemplate = `{model}/resolve/${msg.model.revision}/`
+    const tts = await KokoroTTS.from_pretrained(msg.model?.id ?? MODEL_ID, {
       dtype: msg.dtype,
       device: msg.device,
       progress_callback: (p) => {

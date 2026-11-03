@@ -56,3 +56,9 @@ export const PIPER_VOICE = 'en_US-lessac-medium'
 
 export type VoiceModel = 'kokoro' | 'piper'
 export const MODEL_ID = 'onnx-community/Kokoro-82M-v1.0-ONNX'
+/**
+ * The same Kokoro model with the vocoder's ConvTranspose layers rewritten as zero-insertion + Conv, which
+ * onnxruntime-web's WebGPU backend computes correctly (its ConvTranspose gives wrong/muffled audio on AMD GPUs).
+ * Pinned to a commit so the file can't change under us. See docs/DECISIONS.md.
+ */
+export const GPU_PATCHED_MODEL = { id: 'DevAmarnadhCG/Kokoro-82M-v1.0-ONNX-webgpu', revision: '7d1a298d7e12fbfdd1e24a1d35f6c5181a0ad41a' }

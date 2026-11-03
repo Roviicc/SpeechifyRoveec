@@ -2,6 +2,7 @@ import type { GeneratedAudio, LoadProgress, TtsBackend, TtsInfo } from '@/engine
 import { attemptChain, getAutoResult, getEnginePref, setAutoResult, setSingleThreadOnly, singleThreadOnly, type Attempt } from '@/engine/voice/choice/engineChoice'
 import { CPU_TEST_TIMEOUT_MS, GPU_MAX_RTF, GPU_TEST_TIMEOUT_MS, SILENCE_TIMEOUT_MS } from '@/engine/voice/choice/limits'
 import { WorkerVoiceClient } from '@/engine/voice/shared/workerVoiceClient'
+import { GPU_PATCHED_MODEL } from '@/engine/voice/types'
 
 async function gpuAvailable(): Promise<boolean> {
   const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } }).gpu
@@ -21,6 +22,12 @@ function dtypeFor(device: 'webgpu' | 'wasm'): Dtype {
   const want = new URLSearchParams(globalThis.location?.search ?? '').get('kdtype')
   if (device === 'wasm' && (want === 'fp32' || want === 'q8')) return want
   return DTYPE[device]
+}
+
+/** `?kgpu=patched` loads the WebGPU-fixed model on the GPU (testing; the stock model sounds muffled on some GPUs). */
+function modelFor(device: 'webgpu' | 'wasm') {
+  const want = new URLSearchParams(globalThis.location?.search ?? '').get('kgpu')
+  return device === 'webgpu' && want === 'patched' ? GPU_PATCHED_MODEL : undefined
 }
 
 /** This attempt can't be used (GPU slower than real time, or the engine hung); try the next one. */
@@ -105,7 +112,7 @@ export class KokoroBackend implements TtsBackend {
     return this.client.launch(
       () => new Worker(new URL('./kokoro.worker.ts', import.meta.url), { type: 'module' }),
       {
-        init: { type: 'init', device: a.device, dtype: dtypeFor(a.device), threads: a.threads ?? requestedThreads() },
+        init: { type: 'init', device: a.device, dtype: dtypeFor(a.device), threads: a.threads ?? requestedThreads(), model: modelFor(a.device) },
         silenceMs: SILENCE_TIMEOUT_MS,
         silenceError: (downloading) => (downloading ? new DownloadStalled() : new EngineUnusable('stuck')),
         testTimeoutMs: gpu ? GPU_TEST_TIMEOUT_MS : CPU_TEST_TIMEOUT_MS,

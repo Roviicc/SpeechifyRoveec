@@ -14,6 +14,14 @@ async function gpuAvailable(): Promise<boolean> {
 }
 
 const DTYPE = { webgpu: 'fp32', wasm: 'q8' } as const
+type Dtype = 'fp32' | 'q8'
+
+/** `?kdtype=fp32` overrides the processor (WASM) model variant, e.g. to compare sound quality with the GPU. */
+function dtypeFor(device: 'webgpu' | 'wasm'): Dtype {
+  const want = new URLSearchParams(globalThis.location?.search ?? '').get('kdtype')
+  if (device === 'wasm' && (want === 'fp32' || want === 'q8')) return want
+  return DTYPE[device]
+}
 
 /** This attempt can't be used (GPU slower than real time, or the engine hung); try the next one. */
 class EngineUnusable extends Error {
@@ -97,7 +105,7 @@ export class KokoroBackend implements TtsBackend {
     return this.client.launch(
       () => new Worker(new URL('./kokoro.worker.ts', import.meta.url), { type: 'module' }),
       {
-        init: { type: 'init', device: a.device, dtype: DTYPE[a.device], threads: a.threads ?? requestedThreads() },
+        init: { type: 'init', device: a.device, dtype: dtypeFor(a.device), threads: a.threads ?? requestedThreads() },
         silenceMs: SILENCE_TIMEOUT_MS,
         silenceError: (downloading) => (downloading ? new DownloadStalled() : new EngineUnusable('stuck')),
         testTimeoutMs: gpu ? GPU_TEST_TIMEOUT_MS : CPU_TEST_TIMEOUT_MS,

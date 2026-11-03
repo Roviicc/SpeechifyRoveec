@@ -295,15 +295,6 @@ export function useReaderSync(container: HTMLElement | null, surface: TextSurfac
     [index],
   )
 
-  /** Start the voice at the sentence on the reading line ("Play from here"). */
-  const playFromView = useCallback(() => {
-    // what is on the reading line at the moment of the tap
-    const a = (container && surface && index ? readAnchor(container, surface, index) : null) ?? anchor.current
-    if (!a || !index) return
-    scroller.current!.resume()
-    session().seekTo(sentenceAt(index, a.block, a.offset), true)
-  }, [container, surface, index])
-
   /**
    * What a tap at this point would jump to (null: nothing — and a tap that ends a selection clears it here).
    * Read at the moment of the tap, so a caller may delay the jump itself (double-tap window in PDF Original).
@@ -337,5 +328,5 @@ export function useReaderSync(container: HTMLElement | null, surface: TextSurfac
     [tapPoint, playFrom],
   )
 
-  return { highlighter, viewBlock, jumpVisible, jumpToCurrent, playFromView, onTap, tapPoint, onSurfaceUpdated, playFrom, scroller: scroller.current! }
+  return { highlighter, viewBlock, jumpVisible, jumpToCurrent, onTap, tapPoint, onSurfaceUpdated, playFrom, scroller: scroller.current! }
 }

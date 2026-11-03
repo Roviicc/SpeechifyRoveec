@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { importFile, playerInfo } from './helpers'
+import { importFile } from './helpers'
 
 /** Text under the reading line (25% down the reader), as the reader sees it. */
 function lineText(page: Page) {
@@ -129,25 +129,33 @@ test('PDF: switching Original <-> Text keeps the place', async ({ page }) => {
   expect(where!).toBeLessThan(0.45)
 })
 
-test('"Play from here" starts at the text on screen', async ({ page }) => {
+test('scrolled away from the voice: a chip shows the side and the word, and brings it back', async ({ page }) => {
   await importFile(page, 'alice.epub')
+  await expect(page.getByTestId('play-from-here')).toHaveCount(0)
+  // voice place is at the start: scroll down past it -> chip at the top, chevron up
   await userScroll(page, 2600)
-  await expect(page.getByTestId('play-from-here')).toBeVisible()
-  await expect.poll(() => lineBlock(page)).toBeGreaterThan(-1)
-  const onScreen = await lineBlock(page)
-  await page.getByTestId('play-from-here').click()
-  await expect.poll(async () => (await playerInfo(page)).state).toBe('playing')
-  const vb = await voiceBlock(page)
-  expect(vb === onScreen || vb === onScreen + 1).toBe(true)
+  const chip = page.getByTestId('jump-to-current')
+  await expect(chip).toBeVisible()
+  await expect(chip).toHaveAttribute('data-side', 'above')
+  await expect(page.getByTestId('jump-word')).not.toBeEmpty()
+  await chip.click()
+  await expect(chip).toBeHidden()
+  // and the other way: put the voice further on, scroll back up -> chip at the bottom
+  await page.getByTestId('toc-button').click()
+  await page.getByRole('button', { name: /Chapter III/ }).click()
+  await userScroll(page, -3000)
+  await expect(chip).toBeVisible()
+  await expect(chip).toHaveAttribute('data-side', 'below')
+  await expect(page.getByTestId('jump-word')).toHaveText('Chapter')
 })
 
 test('Contents jumps even after scrolling away (pill showing)', async ({ page }) => {
   await importFile(page, 'alice.epub')
   await userScroll(page, 1800)
-  await expect(page.getByTestId('play-from-here')).toBeVisible()
+  await expect(page.getByTestId('jump-to-current')).toBeVisible()
   await page.getByTestId('toc-button').click()
   await page.getByRole('button', { name: /Chapter III/ }).click()
-  await expect(page.getByTestId('play-from-here')).toBeHidden()
+  await expect(page.getByTestId('jump-to-current')).toBeHidden()
   // the chapter heading is on screen, near the reading line
   await expect.poll(async () => {
     const top = await page.getByTestId('reader-scroll').getByText('Chapter III. A Caucus-Race and a Long Tale').first().evaluate((el) => {

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { ListTree, Locate, Maximize, Minimize, Play } from 'lucide-react'
+import { ChevronDown, ChevronUp, ListTree, Maximize, Minimize } from 'lucide-react'
 import { session } from '@/session/session'
 import { navigate } from '@/app/router'
 import { useSettings } from '@/state/settings'
@@ -15,6 +15,7 @@ import { WhereBar } from './WhereBar'
 import { ReaderMenu } from './ReaderMenu'
 import { ResumeBanner } from './ResumeBanner'
 import { useReaderSync } from '@/features/reader/highlight/useReaderSync'
+import { useCurrentOffscreen } from '@/features/reader/highlight/useCurrentOffscreen'
 import { useBookLoader } from '@/features/reader/hooks/useBookLoader'
 import { useResumeOffer } from '@/features/reader/hooks/useResumeOffer'
 import { useNotes } from '@/features/reader/hooks/useNotes'
@@ -48,6 +49,8 @@ export function ReaderScreen({ bookId }: { bookId: string }) {
   const sync = useReaderSync(container, surface, index)
   const { highlighter } = sync
   const searchHit = useSearchHit(highlighter)
+  // the voice's place scrolled out of view: a small chip (chevron + the word being spoken) brings it back
+  const offscreen = useCurrentOffscreen(container, surface, index, highlighter, sync.jumpVisible)
   const pdfApi = useRef<PdfApi | null>(null)
   // PDF Original: double tap zooms, so a single tap's jump waits out the double-tap window
   const onBodyClick = useTapOrDoubleTap({
@@ -137,17 +140,20 @@ export function ReaderScreen({ bookId }: { bookId: string }) {
           />
         )}
 
-        {sync.jumpVisible && (
-          <div className="anim-fade pointer-events-none absolute right-20 bottom-4 left-20 z-10 flex justify-center">
-            <div className="pointer-events-auto flex h-11 items-center overflow-hidden rounded-full border border-line bg-bg text-sm font-semibold text-fg shadow-[var(--shadow)]">
-              <button onClick={sync.playFromView} data-testid="play-from-here" className="flex h-full items-center gap-1.5 pr-3 pl-4 hover:bg-surface">
-                <Play size={15} fill="currentColor" className="text-primary" /> Play from here
-              </button>
-              <span className="h-5 w-px bg-line" aria-hidden />
-              <button onClick={sync.jumpToCurrent} data-testid="jump-to-current" className="flex h-full items-center gap-1.5 pr-4 pl-3 hover:bg-surface">
-                <Locate size={16} /> Jump to current
-              </button>
-            </div>
+        {offscreen && (
+          <div className={`anim-fade pointer-events-none absolute right-20 left-20 z-10 flex justify-center ${offscreen.side === 'above' ? 'top-3' : 'bottom-4'}`}>
+            <button
+              onClick={sync.jumpToCurrent}
+              data-testid="jump-to-current"
+              data-side={offscreen.side}
+              aria-label={`Back to the voice (${offscreen.side === 'above' ? 'above' : 'below'})`}
+              className="pointer-events-auto flex h-12 max-w-full items-center gap-2 rounded-2xl border border-line bg-bg py-1.5 pr-1.5 pl-3 text-fg shadow-[var(--shadow)] hover:bg-surface"
+            >
+              {offscreen.side === 'above' ? <ChevronUp size={20} strokeWidth={2.5} /> : <ChevronDown size={20} strokeWidth={2.5} />}
+              <span className="min-w-0 truncate rounded-xl bg-[var(--hl-word)] px-4 py-1 text-[17px] font-medium" data-testid="jump-word">
+                {offscreen.word}
+              </span>
+            </button>
           </div>
         )}
 

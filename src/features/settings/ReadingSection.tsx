@@ -3,15 +3,15 @@ import { useState } from 'react'
 import { BookOpenText, Check, ChevronRight } from 'lucide-react'
 import { Segmented, Toggle } from '@/ui/controls'
 import { Sheet } from '@/ui/Sheet'
-import { ANDROID_APP_TARGET, chooseInstalledDictionary, inAndroidApp, LOOKUP_APPS, lookUp, lookupAppName } from '@/features/reader/lookup'
+import { chooseInstalledDictionary, effectiveLookup, lookupOptions, lookUp, lookupAppName } from '@/features/reader/lookup'
 import { PdfPageToggles } from '@/features/reader/sheets'
 import { Group } from './Group'
 
 export function ReadingSection() {
   const st = useSettings()
   const [picking, setPicking] = useState(false)
-  const inApp = inAndroidApp()
-  const options = inApp ? [ANDROID_APP_TARGET, ...LOOKUP_APPS] : LOOKUP_APPS
+  const options = lookupOptions()
+  const chosen = effectiveLookup(st.lookup)
   return (
     <Group title="Reading">
       <Toggle label="Highlight current sentence" checked={st.highlightSentence} onChange={(v) => st.set({ highlightSentence: v })} testId="toggle-hl-sentence" />
@@ -42,38 +42,31 @@ export function ReadingSection() {
         <BookOpenText size={20} className="shrink-0 text-muted" />
         <span className="flex-1">
           <span className="block text-[15px]">Dictionary app</span>
-          <span className="block text-sm text-muted">{lookupAppName(st.lookup)} — used by “Look up” when you select a word</span>
+          <span className="block text-sm text-muted">{lookupAppName(st.lookup)}</span>
         </span>
         <ChevronRight size={18} className="text-muted" />
       </button>
       <Sheet open={picking} onClose={() => setPicking(false)} title="Dictionary app" testId="dictionary-sheet">
-        <p className="mb-2 text-sm text-muted">
-          {inApp
-            ? 'Pick once — “Look up” then opens it directly.'
-            : 'Pick once — “Look up” then opens it directly. Websites can’t see which apps you have, so these are popular dictionaries. In the Lumen Android app you can pick from your installed apps.'}
-        </p>
         <div role="radiogroup" aria-label="Dictionary app">
           {options.map((a) => (
             <button
               key={a.id}
               role="radio"
-              aria-checked={st.lookup === a.id}
+              aria-checked={chosen === a.id}
               onClick={() => st.set({ lookup: a.id })}
-              className="flex min-h-14 w-full items-center gap-3 border-b border-line text-left last:border-b-0"
+              className="flex h-14 w-full items-center gap-3 border-b border-line text-left last:border-b-0"
             >
-              <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 ${st.lookup === a.id ? 'border-primary bg-primary text-on-primary' : 'border-line'}`}>
-                {st.lookup === a.id && <Check size={14} />}
+              <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 ${chosen === a.id ? 'border-primary bg-primary text-on-primary' : 'border-line'}`}>
+                {chosen === a.id && <Check size={14} />}
               </span>
-              <span className="flex-1 py-2">
-                <span className="block text-[15px] font-medium">{a.name}</span>
-                <span className="block text-sm text-muted">{a.note}</span>
-              </span>
+              <span className="flex-1 truncate text-[15px] font-medium">{a.name}</span>
+              <span className="shrink-0 text-sm text-muted">{a.note}</span>
             </button>
           ))}
         </div>
-        {inApp && st.lookup === 'android-app' && (
+        {chosen === 'android-app' && (
           <button className="mt-4 h-12 w-full rounded-full bg-surface font-semibold" onClick={chooseInstalledDictionary} data-testid="dictionary-choose-installed">
-            Choose from my apps…
+            Choose app…
           </button>
         )}
         <button className="mt-3 h-12 w-full rounded-full bg-primary font-semibold text-on-primary" onClick={() => void lookUp('serendipity', st.lookup)} data-testid="dictionary-try">

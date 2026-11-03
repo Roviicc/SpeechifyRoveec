@@ -151,6 +151,9 @@ test('settings: pronunciation dictionary and sleep timer', async ({ page }, info
   await expect(page.getByTestId('voice-row-piper')).toContainText('MB')
   // dictionary app setting
   await page.getByTestId('dictionary-app').click()
+  await expect(page.getByTestId('dictionary-sheet')).not.toContainText('Ask every time')
+  // Android phones get the installed-apps option first
+  await expect(page.getByRole('radio', { name: /My apps/ })).toHaveCount(info.project.name === 'phone' ? 1 : 0)
   await page.getByRole('radio', { name: /ColorDict/ }).click()
   await page.getByTestId('sheet-close').click()
   await expect(page.getByTestId('dictionary-app')).toContainText('ColorDict')

@@ -73,7 +73,7 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  lookup: 'share',
+  lookup: 'wiktionary',
   touchSelection: 'android',
   theme: 'system',
   fontSize: 19,

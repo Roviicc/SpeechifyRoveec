@@ -14,10 +14,10 @@ android {
         applicationId 'app.lumen.reader'
         minSdk 24
         targetSdk 35
-        versionCode 4
-        versionName '1.0.3'
-        manifestPlaceholders = [hostName: lumenHost, launchUrl: lumenUrl + '/']
-        resValue 'string', 'launchUrl', lumenUrl + '/'
+        versionCode 5
+        versionName '1.0.4'
+        manifestPlaceholders = [hostName: lumenHost, launchUrl: lumenUrl + '/?app=android']
+        resValue 'string', 'launchUrl', lumenUrl + '/?app=android'
         resValue 'string', 'assetStatements',
             '[{ "relation": ["delegate_permission/common.handle_all_urls"], "target": { "namespace": "web", "site": "' + lumenUrl + '" } }]'
     }

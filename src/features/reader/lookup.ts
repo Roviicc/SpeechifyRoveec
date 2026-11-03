@@ -7,6 +7,8 @@ export interface LookupTarget {
   id: LookupApp
   name: string
   note: string
+  /** small app icon (public/icons/dict); none for "My apps" */
+  icon?: string
 }
 
 /** Android package of the Lumen app (APK). Inside it, a native helper opens dictionaries as a popup. */
@@ -58,12 +60,12 @@ export const ANDROID_APP_TARGET: LookupTarget = {
 }
 
 export const LOOKUP_APPS: LookupTarget[] = [
-  { id: 'colordict', name: 'ColorDict', note: 'Popup' },
-  { id: 'translate', name: 'Google Translate', note: 'App or website' },
-  { id: 'merriam', name: 'Merriam-Webster', note: 'App or website' },
-  { id: 'dictionarycom', name: 'Dictionary.com', note: 'App or website' },
-  { id: 'wiktionary', name: 'Wiktionary', note: 'Website' },
-  { id: 'google', name: 'Google “define”', note: 'Website' },
+  { id: 'colordict', name: 'ColorDict', note: 'Popup', icon: '/icons/dict/colordict.webp' },
+  { id: 'translate', name: 'Google Translate', note: 'App or website', icon: '/icons/dict/translate.png' },
+  { id: 'merriam', name: 'Merriam-Webster', note: 'App or website', icon: '/icons/dict/merriam.png' },
+  { id: 'dictionarycom', name: 'Dictionary.com', note: 'App or website', icon: '/icons/dict/dictionarycom.png' },
+  { id: 'wiktionary', name: 'Wiktionary', note: 'Website', icon: '/icons/dict/wiktionary.png' },
+  { id: 'google', name: 'Google “define”', note: 'Website', icon: '/icons/dict/google.png' },
 ]
 
 /** Dictionaries offered here: "My apps" first on Android phones. */

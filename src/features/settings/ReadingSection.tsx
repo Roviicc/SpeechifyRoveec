@@ -1,6 +1,6 @@
 import { useSettings } from '@/state/settings'
 import { useState } from 'react'
-import { BookOpenText, Check, ChevronRight } from 'lucide-react'
+import { BookOpenText, Check, ChevronRight, LayoutGrid } from 'lucide-react'
 import { Segmented, Toggle } from '@/ui/controls'
 import { Sheet } from '@/ui/Sheet'
 import { chooseInstalledDictionary, effectiveLookup, lookupOptions, lookUp, lookupAppName } from '@/features/reader/lookup'
@@ -59,6 +59,13 @@ export function ReadingSection() {
               <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 ${chosen === a.id ? 'border-primary bg-primary text-on-primary' : 'border-line'}`}>
                 {chosen === a.id && <Check size={14} />}
               </span>
+              {a.icon ? (
+                <img src={a.icon} alt="" className="h-8 w-8 shrink-0 rounded-lg object-contain" loading="lazy" />
+              ) : (
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-surface text-muted">
+                  <LayoutGrid size={18} />
+                </span>
+              )}
               <span className="flex-1 truncate text-[15px] font-medium">{a.name}</span>
               <span className="shrink-0 text-sm text-muted">{a.note}</span>
             </button>

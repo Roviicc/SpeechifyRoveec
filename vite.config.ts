@@ -94,7 +94,7 @@ export default defineConfig({
         globIgnores: ['google.html'],
         maximumFileSizeToCacheInBytes: 12 * 1024 * 1024,
         navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/google\.html/],
+        navigateFallbackDenylist: [/^\/google\.html/, /^\/get-app\.html/, /\.apk$/],
         runtimeCaching: [
           {
             // onnxruntime wasm (~21 MB) is too big to precache; cache it on first use

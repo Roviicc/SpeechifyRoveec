@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { BookOpenText, Check, ChevronRight, LayoutGrid } from 'lucide-react'
 import { Segmented, Toggle } from '@/ui/controls'
 import { Sheet } from '@/ui/Sheet'
-import { chooseInstalledDictionary, effectiveLookup, lookupOptions, lookUp, lookupAppName } from '@/features/reader/lookup'
+import { chooseInstalledDictionary, effectiveLookup, inAndroidApp, lookupOptions, lookUp, lookupAppName } from '@/features/reader/lookup'
 import { PdfPageToggles } from '@/features/reader/sheets'
 import { Group } from './Group'
 
@@ -71,6 +71,11 @@ export function ReadingSection() {
             </button>
           ))}
         </div>
+        {chosen === 'android-app' && !inAndroidApp() && (
+          <a href="/get-app.html" className="mt-4 flex h-12 w-full items-center justify-center rounded-full border border-line font-semibold" data-testid="get-android-app">
+            Get the Lumen app (needed for My apps)
+          </a>
+        )}
         {chosen === 'android-app' && (
           <button className="mt-4 h-12 w-full rounded-full bg-surface font-semibold" onClick={chooseInstalledDictionary} data-testid="dictionary-choose-installed">
             Choose app…

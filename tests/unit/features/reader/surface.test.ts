@@ -97,7 +97,8 @@ describe('look up', () => {
 describe('android app helper', () => {
   it('builds intent URLs for the native helper', async () => {
     const { nativeHelperUrl } = await import('@/features/reader/lookup')
-    expect(nativeHelperUrl('lookup', 'walk able')).toBe('intent://lookup?q=walk%20able#Intent;scheme=lumen;package=app.lumen.reader;end')
-    expect(nativeHelperUrl('choose')).toBe('intent://choose#Intent;scheme=lumen;package=app.lumen.reader;end')
+    const fb = `S.browser_fallback_url=${encodeURIComponent(`${location.origin}/get-app.html`)};`
+    expect(nativeHelperUrl('lookup', 'walk able')).toBe(`intent://lookup?q=walk%20able#Intent;scheme=lumen;package=app.lumen.reader;${fb}end`)
+    expect(nativeHelperUrl('choose')).toBe(`intent://choose#Intent;scheme=lumen;package=app.lumen.reader;${fb}end`)
   })
 })

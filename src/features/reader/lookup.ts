@@ -33,7 +33,9 @@ export const onAndroid = () => typeof navigator !== 'undefined' && /Android/i.te
 /** Ask the app's native helper (lumen://…) — only works inside the Lumen Android app. */
 export function nativeHelperUrl(action: 'lookup' | 'choose', query = ''): string {
   const q = action === 'lookup' ? `?q=${encodeURIComponent(query)}` : ''
-  return `intent://${action}${q}#Intent;scheme=lumen;package=${ANDROID_PACKAGE};end`
+  // without the app, go to Lumen's own "get the app" page instead of the Play Store (Lumen isn't on it)
+  const fallback = encodeURIComponent(`${location.origin}/get-app.html`)
+  return `intent://${action}${q}#Intent;scheme=lumen;package=${ANDROID_PACKAGE};S.browser_fallback_url=${fallback};end`
 }
 
 /** Pick the dictionary from the apps installed on the phone (native list, Lumen Android app only). */

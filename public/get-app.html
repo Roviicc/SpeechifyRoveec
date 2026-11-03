@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#FFFFFF" />
+<title>Get the Lumen app</title>
+<style>
+  :root { --bg:#fff; --fg:#1b1f2a; --muted:#6b7280; --line:#e5e7eb; --surface:#f4f5f8; --primary:#2f54eb; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#111318; --fg:#e8eaf0; --muted:#9aa0ae; --line:#2a2e38; --surface:#1b1e26; --primary:#6b8bff; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  main { max-width:30rem; margin:0 auto; padding:48px 20px; }
+  img { width:72px; height:72px; border-radius:18px; }
+  h1 { font-size:26px; margin:20px 0 8px; }
+  p { color:var(--muted); margin:0 0 20px; }
+  ol { color:var(--muted); padding-left:20px; margin:0 0 28px; }
+  li { margin-bottom:6px; }
+  a.btn { display:flex; align-items:center; justify-content:center; height:52px; border-radius:999px; font-weight:600; text-decoration:none; margin-bottom:12px; }
+  .primary { background:var(--primary); color:#fff; }
+  .plain { background:var(--surface); color:var(--fg); }
+</style>
+</head>
+<body>
+<main>
+  <img src="/pwa-192.png" alt="" />
+  <h1>Get the Lumen app</h1>
+  <p>Picking a dictionary from the apps on your phone, and ColorDict as a popup over the book, need the Lumen Android app. Your books and settings stay the same.</p>
+  <ol>
+    <li>Tap <b>Download the app</b>.</li>
+    <li>Open the downloaded file and tap <b>Install</b> (allow installs from your browser if Android asks).</li>
+    <li>Open Lumen from its new icon.</li>
+  </ol>
+  <a class="btn primary" href="/lumen.apk" download="Lumen.apk">Download the app</a>
+  <a class="btn plain" href="/">Back to Lumen</a>
+</main>
+</body>
+</html>

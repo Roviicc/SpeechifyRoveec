@@ -67,3 +67,9 @@ Needs a human: real Google sign-in + Picker + sync through `/google.html` on des
 Source grew from ~7.6k to ~8.2k lines: duplication removed, but splitting into small modules adds imports,
 interfaces and comments. Bug fixed on the way: saved sentence audio wasn't labelled per voice (switching voices could
 replay the other voice). Real-voice checks (Piper, Kokoro CPU, Auto -> Piper) pass after every step.
+
+## Google Drive switched on (deployed site)
+The production site at https://speechify-roveec.vercel.app now has a Google Cloud project ("Lumen", Testing mode)
+with the Drive + Picker APIs, a web OAuth client limited to that origin, and a Picker-only API key limited to
+that site. The two public values are set as Vercel environment variables (`VITE_GOOGLE_CLIENT_ID`,
+`VITE_GOOGLE_API_KEY`); nothing is stored in the repo.

@@ -77,6 +77,8 @@ export interface AudioRow {
   duration: number
   size: number
   lastUsed: number
+  /** generated ahead ("Prepare" in Contents): never evicted by the LRU */
+  prepared?: 1
 }
 
 export interface SettingRow {

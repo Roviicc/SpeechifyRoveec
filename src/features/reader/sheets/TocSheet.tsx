@@ -8,6 +8,8 @@ import type { BookIndex } from '@/engine/book/bookIndex'
 import type { BookDoc } from '@/engine/book/types'
 import { PageGrid } from './PageGrid'
 import { tocRanges, type TocRange } from './tocRanges'
+import { PrepareButton, PrepareHeader } from './PrepareControls'
+import { usePreparedAudio } from './usePreparedAudio'
 
 type Tab = 'contents' | 'pages'
 
@@ -28,6 +30,7 @@ export function TocSheet({
   const section = usePlayback((s) => s.section)
   const at = usePlayback((s) => s.index)
   const speed = usePlayback((s) => s.speed)
+  const bookId = usePlayback((s) => s.bookId)
   const [tab, setTab] = useState<Tab>('contents')
   const hasPages = doc.type === 'pdf' && !!file
   const showPages = hasPages && tab === 'pages'
@@ -39,6 +42,9 @@ export function TocSheet({
     else doc.toc.forEach((t, i) => t.section <= section && (c = i))
     return c
   }, [ranges, doc.toc, section, at])
+
+  const prepared = usePreparedAudio(bookId, index, open)
+  const sentenceCount = index?.sentences.length ?? 0
 
   const currentPage = index?.blocks[index.sentences[at]?.block ?? -1]?.page ?? 0
 
@@ -86,6 +92,10 @@ export function TocSheet({
       ) : doc.toc.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted">This book has no table of contents.</p>
       ) : (
+        <>
+        {bookId && index && sentenceCount > 0 && prepared.known && (
+          <PrepareHeader bookId={bookId} totalChars={index.totalChars} have={prepared.count(0, sentenceCount - 1)} count={sentenceCount} />
+        )}
         <ul>
           {doc.toc.map((t, i) => {
             const r = ranges?.[i]
@@ -94,7 +104,7 @@ export function TocSheet({
             const pct = isCurrent && r ? percent(r) : 0
             const right = isCurrent && r ? `${pct}%` : done ? '' : t.level === 0 && r ? minutes(r) : ''
             return (
-              <li key={i}>
+              <li key={i} className="flex items-center gap-1">
                 <button
                   data-toc-current={isCurrent}
                   data-toc-done={done || undefined}
@@ -105,13 +115,15 @@ export function TocSheet({
                     session().seekTo({ section: t.section, block, offset: 0 })
                     onClose()
                   }}
-                  className={`flex min-h-12 w-full items-center gap-3 rounded-xl px-2 py-1.5 text-left ${
+                  className={`flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-1.5 text-left ${
                     isCurrent ? 'bg-primary-soft font-semibold text-primary' : 'hover:bg-surface'
                   }`}
                   style={{ paddingLeft: 8 + t.level * 16 }}
                 >
                   <span className="flex min-w-0 flex-1 flex-col gap-1.5">
-                    <span className={`truncate ${done ? 'text-muted' : ''}`}>{t.title}</span>
+                    <span id={`toc-title-${i}`} className={`truncate ${done ? 'text-muted' : ''}`}>
+                      {t.title}
+                    </span>
                     {isCurrent && r && (
                       <span className="block h-1 w-full overflow-hidden rounded-full bg-primary/20" aria-hidden data-testid="toc-progress">
                         <span className="block h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
@@ -124,10 +136,16 @@ export function TocSheet({
                     right && <span className={`shrink-0 text-xs tabular-nums ${isCurrent ? 'text-primary' : 'text-muted'}`}>{right}</span>
                   )}
                 </button>
+                {bookId && r && prepared.known && t.level === 0 ? (
+                  <PrepareButton bookId={bookId} label={t.title} start={r.start} end={r.end} have={prepared.count(r.start, r.end)} describedBy={`toc-title-${i}`} />
+                ) : (
+                  prepared.known && <span className="w-11 shrink-0" aria-hidden />
+                )}
               </li>
             )
           })}
         </ul>
+        </>
       )}
     </Sheet>
   )

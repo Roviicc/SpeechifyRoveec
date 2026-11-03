@@ -102,3 +102,30 @@ CSS highlights sits above, unfiltered. *Text-mode page markers* ("— page N —
 whose label is CSS generated content (`::before { content: attr(data-label) }`): no DOM text, so nothing is read,
 selected, hit by `caretPositionFromPoint`, or mixed into the `[data-b]` offset mapping and the position anchor.
 **Better PDFs: columns and junk (PDF_DOC_VERSION 3).** Pages are reordered column by column only when a clear gutter exists: a strip in the middle 20–80% of the text width, ≥ 0.6 × body height wide, crossed by ≤ 30% of lines, with ≥ 6 lines on each side whose median length is ≥ 6 × body height and ≥ 0.6 × the side's longest lines (rules out tables), and a common left edge for the right side. Lines that the content stream merged across the gutter are split by their item boxes (spans stay exact); lines that span the gutter (title, abstract, full-width figures, footnotes) cut the page into bands read top to bottom, columns left then right inside each band (recursive, so three columns work). Pages without a gutter keep content-stream order, the same blocks as before (only the new skip marks can differ). New block skips, all toggleable in Settings → Smart skip and on by default: `footnote` (lines ≤ 0.88 × body height, below every body-size line of their column, top line starting with a note marker `1`/`*`/`†`…, ≤ 40% of the page), `table` (≥ 3 consecutive rows that are ≥ 60% numbers or ≥ 3 short cells split by gaps ≥ 1.5 × line height) and `caption` (a paragraph ≤ 160 chars starting "Figure 3." / "Fig. 2:" / "Table 1" / "TABLE IV —"; "Figure 3 shows…" is read). Skip settings saved before these keys existed count as on. PDFs have their own parser version so EPUBs are not re-parsed; on opening a stale PDF the saved position, bookmarks and highlights are moved to the new block numbering by finding the surrounding text on the same page (highlights by their text), falling back to the page start; their `updatedAt` moves by 1 ms so they beat their own synced copy but not real edits from another device.
+
+**2026-11-03 — Prepare chapters (generate audio ahead) + compressed audio cache.** Contents gets "Prepare all" and a
+per-chapter Prepare button (ring while running/queued, tap to cancel; primary check when every readable sentence has
+audio for the current voice). `session/preparer.ts` is a session-level queue (one range at a time, survives leaving the
+reader, Library rows say "Preparing 34%", the where-bar shows a small ring). It writes into the *same* cache rows the
+player reads: key `audioKey(bookId, sentenceIndex)` = `bookId:index`, row `hash` = `audioHash(voice, spokenText)`
+(both exported from `data/audioCache.ts`; together they identify a sentence's audio, e.g. for a later Drive export).
+Smart-skipped text is never a sentence, so it is never generated. **Priority:** the session's backend is a
+`PriorityBackend`; the player calls `generate()` as before, the preparer `generateBackground()`, which runs one sentence
+at a time and only when no player request is in flight or pending (`player.generating`, which also covers the cache read
+before a generate), so playback waits at most for the one background sentence already in the engine. Background
+requests use epoch `Number.MAX_SAFE_INTEGER`, so a seek's `cancel(epoch)` never drops them. **Eviction:** prepared rows carry
+`prepared: 1`; the 500 MB LRU skips (and doesn't count) them, a later player write of the same sentence keeps the mark,
+"Clear audio cache" keeps them; they go with the book or via Settings → Storage → Prepared audio → Delete. Before every
+20 sentences the preparer checks a 4 GB own cap and `navigator.storage.estimate()` (>= 200 MB free, < 95% used) and
+stops with "Storage is full" (also on QuotaExceededError); `navigator.storage.persist()` is requested on the first
+Prepare. **Compression:** all cached audio (played and prepared) is stored as Ogg Opus, 24 kbit/s mono, encoded with
+WebCodecs `AudioEncoder` and our own small Ogg muxer (`engine/voice/player/ogg.ts`, pre-skip from the encoder's
+OpusHead, last granule trims the end padding to the exact PCM length). Measured in Chromium: 0.176 MB per minute (WAV 24
+kHz: ~2.9 MB/min), so the 9.4 h book is ~100 MB. `<audio>` and `decodeAudioData` both play it with the exact duration
+(e2e). The duration stored with the row is the original PCM duration (word timing). The player keeps playing the fresh
+WAV from memory and the compression runs in the store's background write, so start latency is unchanged. Where
+`AudioEncoder`/Opus is missing (or not a secure context) the WAV is stored. **Preparing speed** (Settings → Storage,
+device-local): Full / Balanced / Light rest 0 / 0.4x / 1.5x of each sentence's synthesis time; live playback is never
+throttled. Not done: a second parallel Kokoro worker for WebGPU (it would load the model twice; left as a follow-up).
+Changing smart-skip/pronunciation mid-run makes the rest of that run write rows the new index won't match (harmless, the
+row is simply regenerated when played).

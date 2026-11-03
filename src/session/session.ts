@@ -1,15 +1,17 @@
 import { Player, type SeekOffset } from '@/engine/voice/player/player'
 import { createBackend, isFakeVoice } from '@/engine/voice/select'
 import { isVoiceInstalled } from '@/engine/voice/install'
-import type { TtsBackend, VoiceModel } from '@/engine/voice/types'
+import { CancelledError, type VoiceModel } from '@/engine/voice/types'
+import { PriorityBackend } from '@/engine/voice/priorityBackend'
 import { sentenceAt, type BookIndex } from '@/engine/book/bookIndex'
 import { getVoicePref, setAutoVoice } from '@/engine/voice/choice/engineChoice'
 import { audioStore } from '@/data/audioCache'
-import { saveProgress } from '@/data/repo'
+import { getContent, saveProgress } from '@/data/repo'
 import type { Locator } from '@/data/db'
 import { toast } from '@/ui/toast'
-import { settingsSnapshot, useSettings } from '@/state/settings'
+import { PREPARE_REST, settingsSnapshot, useSettings } from '@/state/settings'
 import { usePlayback } from '@/state/playback'
+import { usePrepare } from '@/state/prepare'
 import { setupMediaSession, updateMediaPosition } from './mediaSession'
 import { DEFAULT_SECONDS_PER_CHAR, estimateTimes, playedFraction, refineSecondsPerChar, sentenceAtFraction, type TimeEstimate } from './estimates'
 import { indexBook, resolveStart, watchSettings } from './indexing'
@@ -20,6 +22,8 @@ import { SleepTimer, type SleepMode } from './sleepTimer'
 import type { OpenBook } from './types'
 import { PREFETCH_VISIBLE, prefetchDepth, watchVisibility } from './visibility'
 import { SlowVoiceDetector, slowVoiceAction } from './voiceAutoSwitch'
+import { Preparer } from './preparer'
+import { hasRoomForPrepared } from './storageRoom'
 
 export type { OpenBook } from './types'
 export { PREFETCH_HIDDEN, PREFETCH_VISIBLE } from './visibility'
@@ -32,8 +36,12 @@ type IndexListener = (index: BookIndex) => void
  * this class wires them to the player and the playback store.
  */
 class Session {
-  readonly backend: TtsBackend
+  /** the voice, shared by the player (first) and the preparer (background lane) */
+  readonly backend: PriorityBackend
   readonly player: Player
+  /** generates chapters' audio ahead of time ("Prepare" in Contents) */
+  readonly preparer: Preparer
+  private preparedListeners = new Set<(bookId: string, index: number) => void>()
   book: OpenBook | null = null
   index: BookIndex | null = null
   /** Seconds of audio per spoken character at 1x (refined from real audio as it is generated). */
@@ -44,10 +52,30 @@ class Session {
   private readonly slowVoice = new SlowVoiceDetector()
 
   constructor() {
-    this.backend = createBackend()
+    // the player's own requests (current sentence + prefetch) always go before background preparation
+    this.backend = new PriorityBackend(createBackend(), () => this.player.generating)
     // saved audio is labelled with the voice that made it, so switching voices never replays the other voice
     audioStore.voice = () => this.voice()
     this.player = new Player({ backend: this.backend, store: audioStore, prefetch: PREFETCH_VISIBLE })
+    this.preparer = new Preparer({
+      generate: (text) => this.backend.generateBackground(text),
+      store: audioStore,
+      voice: () => this.voice(),
+      sentences: (bookId) => this.sentenceTexts(bookId),
+      hasRoom: () => hasRoomForPrepared(() => audioStore.preparedTotal()),
+      msPerCharGuess: () => {
+        const rtf = this.player.rtf ?? this.backend.info?.testRtf ?? 1
+        return rtf * this.secondsPerChar * 1000
+      },
+      restFactor: () => PREPARE_REST[useSettings.getState().prepareSpeed] ?? 0,
+      onSentence: (bookId, index) => this.preparedListeners.forEach((fn) => fn(bookId, index)),
+    })
+    let lastError: string | undefined
+    this.preparer.subscribe((st) => {
+      usePrepare.setState(st, true)
+      if (st.error && st.error !== lastError) toast(st.error, 7000)
+      lastError = st.error
+    })
     this.applySpeed(useSettings.getState().speed)
 
     this.sleep = new SleepTimer({
@@ -130,6 +158,36 @@ class Session {
   /** Voice currently in use (fake backend reports kokoro). */
   voice(): VoiceModel {
     return (this.backend as { voice?: VoiceModel }).voice ?? 'kokoro'
+  }
+
+  /** Spoken text of every sentence of a book, exactly as the player reads it (same index settings). */
+  private async sentenceTexts(bookId: string): Promise<string[]> {
+    let idx = this.book?.id === bookId ? this.index : null
+    if (!idx) {
+      const doc = await getContent(bookId)
+      // the book was deleted meanwhile: nothing to do
+      if (!doc) throw new CancelledError()
+      idx = indexBook(doc, settingsSnapshot())
+    }
+    return idx.sentences.map((s) => s.spoken.text)
+  }
+
+  /**
+   * Generate the audio of sentences `from..to` of a book ahead of time (queued behind earlier requests). Asks before
+   * a first-time voice download, like play.
+   */
+  prepare(bookId: string, from: number, to: number, label: string) {
+    this.withDownloadConsent(() => {
+      void this.ensureModel()
+      void requestPersistentStorage()
+      this.preparer.enqueue(bookId, from, to, label)
+    })
+  }
+
+  /** A sentence of some book got its prepared audio (Contents updates its marks). */
+  onPrepared(fn: (bookId: string, index: number) => void): () => void {
+    this.preparedListeners.add(fn)
+    return () => this.preparedListeners.delete(fn)
   }
 
   /** Switch the voice engine (Auto / GPU / Processor): unload the model; it reloads on the next play. */
@@ -324,6 +382,14 @@ class Session {
   clearSleep() {
     this.sleep.clear()
   }
+}
+
+let persistAsked = false
+/** Ask once for persistent storage, so the browser doesn't clear prepared audio under storage pressure. */
+async function requestPersistentStorage() {
+  if (persistAsked) return
+  persistAsked = true
+  await navigator.storage?.persist?.().catch(() => false)
 }
 
 let instance: Session | null = null

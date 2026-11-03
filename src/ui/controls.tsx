@@ -125,3 +125,26 @@ export function formatMinutes(sec: number): string {
   if (m < 60) return `${m} min`
   return `${Math.floor(m / 60)} h ${m % 60} min`
 }
+
+/** Circular progress (indeterminate spinner when fraction is null). */
+export function ProgressRing({ fraction, size = 28, className = '' }: { fraction: number | null; size?: number; className?: string }) {
+  const r = 9
+  const c = 2 * Math.PI * r
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" className={`${fraction === null ? 'animate-spin' : ''} ${className}`} aria-hidden>
+      <circle cx="12" cy="12" r={r} fill="none" stroke="var(--surface-2)" strokeWidth="3" />
+      <circle
+        cx="12"
+        cy="12"
+        r={r}
+        fill="none"
+        stroke="var(--primary)"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeDasharray={c}
+        strokeDashoffset={c * (1 - (fraction ?? 0.25))}
+        transform="rotate(-90 12 12)"
+      />
+    </svg>
+  )
+}

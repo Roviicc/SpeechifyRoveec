@@ -3,6 +3,8 @@ import type { BookIndex } from '@/engine/book/bookIndex'
 import { sentenceAt } from '@/engine/book/bookIndex'
 import type { BookDoc } from '@/engine/book/types'
 import { usePlayback } from '@/state/playback'
+import { usePrepare } from '@/state/prepare'
+import { PrepareIndicator } from './PrepareIndicator'
 
 /** Chapter title for a section: its own title, without the " · p. N" page suffix PDFs add. */
 export function chapterName(doc: BookDoc, section: number): string {
@@ -36,12 +38,17 @@ export function WhereBar({ doc, index, viewBlock }: { doc: BookDoc; index: BookI
     const block = viewBlock ?? index.sentences[voiceIndex]?.block
     return block === undefined ? null : whereLabel(doc, index, block)
   }, [doc, index, viewBlock, voiceIndex])
-  if (!label?.primary) return <div className="h-7 shrink-0 bg-bg" aria-hidden />
+  const preparing = usePrepare((s) => !!s.current)
+  const prep = <PrepareIndicator className="absolute top-1/2 right-4 -translate-y-1/2" />
+  if (!label?.primary) return <div className="relative h-7 shrink-0 bg-bg">{prep}</div>
   return (
-    <div className="flex h-7 shrink-0 items-center justify-center gap-1.5 bg-bg px-4 text-xs text-muted" data-testid="where-bar" aria-live="polite">
-      <span className="min-w-0 truncate">{label.primary}</span>
-      <span aria-hidden>·</span>
-      <span className="shrink-0 tabular-nums">{label.percent}%</span>
+    <div className={`relative flex h-7 shrink-0 items-center justify-center bg-bg text-xs ${preparing ? 'px-16' : 'px-4'} text-muted`} data-testid="where-bar">
+      <span className="flex min-w-0 items-center gap-1.5" aria-live="polite">
+        <span className="min-w-0 truncate">{label.primary}</span>
+        <span aria-hidden>·</span>
+        <span className="shrink-0 tabular-nums">{label.percent}%</span>
+      </span>
+      {prep}
     </div>
   )
 }

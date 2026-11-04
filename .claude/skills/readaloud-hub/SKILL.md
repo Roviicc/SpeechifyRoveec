@@ -10,13 +10,14 @@ This conversation is the **hub**. It plans, delegates, reviews, tests and integr
 fixes (a handful of lines) or integration glue.
 
 ## Project at a glance
-Personal Speechify-lite PWA ("Lumen"): EPUB + PDF reader that reads aloud with one fixed Kokoro English voice
-(`af_heart`), sentence + word highlight, tap-to-jump, speed 0.5x-3x, themes, Aa settings, PDF zoom, Google Drive
-import + sync. React + Vite + TypeScript + Tailwind, kokoro-js in a Web Worker, pdfjs-dist, own EPUB parser (JSZip),
-Dexie, Google Identity Services + Picker. No backend server.
+Personal Speechify-lite PWA ("Lumen"): EPUB + PDF reader that reads aloud with on-device English voices
+(*Natural* = Kokoro `af_heart`, *Fast* = Piper, *Auto* picks), sentence + word highlight, tap-to-jump, speed 0.5x-3x,
+themes, Aa settings, PDF zoom, Prepare (audio ahead, Opus), Google Drive import + sync (progress, prepared audio, book
+files). React + Vite + TypeScript + Tailwind, kokoro-js / Piper in Web Workers, pdfjs-dist, own EPUB parser (JSZip),
+Dexie, Google Identity Services + Picker. No backend server. Android app = Trusted Web Activity in `android/`.
 
 Out of scope (refuse scope creep, note ideas in docs/IDEAS.md instead): AI chat/summaries/quizzes, book store,
-voice picker, other languages, OCR, stats, MP3 export, accounts, servers.
+a picker of many voices, other languages, OCR, stats, MP3 export, accounts, servers.
 
 ## Source of truth (read at the start of every session)
 - `docs/PLAN.md` - phases, deliverables, "done when" criteria
@@ -30,7 +31,7 @@ voice picker, other languages, OCR, stats, MP3 export, accounts, servers.
 4. Library + Dexie data (progress, bookmarks, highlights, search)
 5. Google Drive import + appDataFolder sync
 6. PWA install, Media Session, sleep timer, shortcuts, pronunciation list
-All six are implemented (see PROGRESS.md); new work is fixes and improvements.
+All six are implemented (see PROGRESS.md); new work is fixes and improvements. Open items are listed in PLAN.md.
 
 ## Workflow per task
 1. **Orient**: read PLAN/PROGRESS/DECISIONS; restate the goal and acceptance criteria in 3-5 lines.

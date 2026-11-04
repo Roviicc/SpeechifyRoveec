@@ -9,8 +9,11 @@ There is no backend server. The "backend" is Kokoro in a Web Worker, IndexedDB v
 
 ## TTS backends (`src/engine/voice/`)
 Everything talks to a `TtsBackend` (types.ts): `init(onProgress)`, `generate(text, epoch) -> {wav, duration, genMs}`, `cancel(epoch)`.
-- **KokoroBackend** (kokoro/backend.ts + kokoro/kokoro.worker.ts): `kokoro-js` with `onnx-community/Kokoro-82M-v1.0-ONNX`, voice fixed to `af_heart`
-  (never expose a picker). `navigator.gpu` + adapter -> `webgpu`/`fp32`, else `wasm`/`q8`. Output is silence-trimmed and encoded as 16-bit WAV.
+- **KokoroBackend** (kokoro/backend.ts + kokoro/kokoro.worker.ts): `kokoro-js` with `onnx-community/Kokoro-82M-v1.0-ONNX`, voice `af_heart`
+  ("Natural"). GPU (WebGPU fp32, WebGPU-fixed model) -> threaded WASM -> single-thread WASM, moving on only on failure/stall.
+  Output is silence-trimmed 16-bit WAV.
+- **PiperBackend** (piper/): `en_US-lessac-medium` ("Fast", ~11x faster; phones). *Auto* tries Kokoro once per device.
+  No other voices (no many-voice picker).
 - **FakeTtsBackend**: instant, deterministic silent WAV, 60 ms per character (min 300 ms). Selected with `?tts=fake` or `VITE_TTS=fake`.
 - A native backend (Capacitor + sherpa-onnx) can later drop in behind the same interface.
 
@@ -35,16 +38,16 @@ Worker protocol (shared/protocol.ts): in `init`, `generate {reqId, epoch, text}`
 - **RTF** (generation ms / audio ms) rolling average, shown with `?debug=1`. Smooth playback needs RTF < 1/speed.
 
 ## Audio cache (src/data/audioCache.ts)
-Key `bookId:sentenceIndex` + hash of the spoken text; `{blob, duration, bookId, lastUsed}`; LRU cap 500 MB; "Clear audio cache" in Settings.
+Key `bookId:sentenceIndex` + hash of voice + spoken text; stored as Ogg Opus; LRU cap 500 MB; prepared rows (`prepared: 1`) are never evicted.
 
 ## Dexie schema (`src/data/db.ts`)
 ```
-books: id (sha-256 of file), title, author, type, source('local'|'drive'), driveFileId, size, addedAt, lastOpenedAt, cover, updatedAt
+books: id (sha-256 of file), title, author, type, source('local'|'drive'), driveFileId, driveCopyId, size, addedAt, lastOpenedAt, cover, updatedAt
 files: bookId, blob          content: bookId, version, doc (parsed BookDoc)
 progress: bookId, sentence, locator, percent, sectionTitle, updatedAt
 bookmarks: id, bookId, locator, label, createdAt, updatedAt, deleted
 highlights: id, bookId, start, end, text, color, note, createdAt, updatedAt, deleted
-audio: key, bookId, hash, blob, duration, size, lastUsed
+audio: key, bookId, hash, blob, duration, size, lastUsed, prepared, textHash, voice, fromPack
 settings: key, value, updatedAt
 ```
 Locator = `{section, block, offset}`. Use the repositories (src/data/repo.ts). Save progress every few seconds while playing, on pause and on hide.
@@ -54,6 +57,8 @@ Locator = `{section, block, offset}`. Use the repositories (src/data/repo.ts). S
 - Import: Picker (EPUB + PDF mime types, setAppId = project number) -> `files.get?alt=media` -> Blob -> importBook, keep `driveFileId`.
 - Sync: one `sync.json` in `appDataFolder` (books, progress, bookmarks, highlights, settings). Per-record last-write-wins on `updatedAt`;
   tombstones for deletes (sync/syncCore.ts, sync/merge.ts). Sync on open, pause, every 60 s while playing, and on hide.
+- Binary appDataFolder files tagged with `appProperties`: prepared audio packs (sync/audio/) and copies of books
+  imported from a local file (sync/bookCopies.ts, `driveCopyId`), so other devices can download them.
 - All Drive calls go through the `DriveClient` interface; **FakeDrive** (in-memory) is used in tests.
 - Env: `VITE_GOOGLE_CLIENT_ID`, `VITE_GOOGLE_API_KEY` (`.env.example` only, never commit secrets).
 

@@ -68,8 +68,36 @@ Source grew from ~7.6k to ~8.2k lines: duplication removed, but splitting into s
 interfaces and comments. Bug fixed on the way: saved sentence audio wasn't labelled per voice (switching voices could
 replay the other voice). Real-voice checks (Piper, Kokoro CPU, Auto -> Piper) pass after every step.
 
-## Google Drive switched on (deployed site)
+## 2026-11-03 — Google Drive switched on (deployed site)
 The production site at https://speechify-roveec.vercel.app now has a Google Cloud project ("Lumen", Testing mode)
 with the Drive + Picker APIs, a web OAuth client limited to that origin, and a Picker-only API key limited to
 that site. The two public values are set as Vercel environment variables (`VITE_GOOGLE_CLIENT_ID`,
 `VITE_GOOGLE_API_KEY`); nothing is stored in the repo.
+
+## 2026-11-02 — Reader, dictionary and Android app
+- Reading position follows where the eyes are, also without audio; kept across PDF mode and text-setting changes.
+- Contents shows chapter progress and PDF page thumbnails; where-am-I line, chapter marks and scrub bubble; full-screen
+  button; word chip replaces the Play from here / Jump to current pill (2026-11-03).
+- Better PDFs: column reading order, footnotes / captions / tables skipped (toggleable); double-tap zoom, snap to
+  pages, dark pages, page markers in Text mode.
+- Look up: dictionary chooser in Settings, Android text-selection option. Android app (`android/`, Trusted Web Activity)
+  with a native dictionary helper and ColorDict popup; Robolectric smoke tests. Now v1.0.4; without the app, Look up
+  shows a "Get the Lumen app" page (2026-11-03).
+
+## 2026-11-03 — Voice quality, Prepare, prepared audio through Drive
+- Natural voice on the GPU uses the WebGPU-fixed Kokoro model by default: the user confirmed clear audio on the
+  RX 9060 XT (RTF 0.125; stock model RTF 0.087 but muffled). The Natural voice always tries the GPU first.
+- Prepare chapters ahead from Contents; cached audio stored as Ogg Opus (0.176 MB per minute, ~1/16 of WAV).
+- GPU usage slider and Turbo ×2/×3 workers while preparing.
+- Prepared audio is uploaded to the Drive appDataFolder and downloaded on other devices (on Wi-Fi automatically).
+
+Needs a human: Turbo on the PC (GPU use, memory, smooth playback during a run); prepared audio made on the PC
+playing on the phone.
+
+## 2026-11-04 — Books imported from a file reach other devices
+The user's PDF imported from the PC's disk never appeared on the phone (only its prepared audio did): only books picked
+from Google Drive had a file the phone could download. The file of such a book is now copied to the Drive
+appDataFolder after a sync and listed on other devices under "On your other devices". `npm run check`: 172 unit tests
+(6 new in `tests/unit/sync/bookCopies.test.ts`).
+
+Needs a human: import a book from a file on the PC, then check that it appears on the phone and downloads.

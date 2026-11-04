@@ -213,3 +213,15 @@ choice (Kokoro vs Piper) is unchanged.
 *To verify on the PC:* GPU utilisation and ×real time with Turbo Off / ×2 / ×3 (expect the gain to flatten once the
 GPU is saturated), GPU memory (each worker holds its own copy of the fp32 model, roughly +0.3–0.5 GB), that memory
 drops back after the queue ends, and that playback started during a Turbo run stays smooth.
+
+**2026-11-04 — Books imported from a file travel between devices through Google Drive.** Before, only books picked
+from Google Drive (with a `driveFileId`) appeared under "On your other devices"; a book imported from the computer's
+disk synced its progress and prepared audio but never its file, so the phone could not get it. Now, after every sync,
+`sync/bookCopies.ts` uploads the file of each book that has neither a `driveFileId` nor a `driveCopyId` to the hidden
+`appDataFolder` (tagged `{kind: 'book', bookId}`, multipart or resumable like audio packs) and stores the file id as
+`driveCopyId`, which travels in sync.json; the other device downloads it from the cloud list like a Drive book. One
+listing per pass finds copies another device already made (no second upload) and, for books whose synced entry is a
+tombstone, deletes their copy (done ids remembered in `bookCopiesCleaned`); the pass is skipped when there is nothing
+to do. It runs beside the sync, not inside it, so a big upload never holds up progress syncing; after an upload a
+sync publishes the id. Book merges keep a Drive id from the losing side when the winner has none, and `applyToLocal`
+takes a `driveCopyId` it lacks even without a newer edit, so ids are never lost between devices.

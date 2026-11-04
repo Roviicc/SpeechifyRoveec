@@ -28,7 +28,7 @@ export function LibraryScreen({ onImport }: { onImport: () => void }) {
     setProgress(Object.fromEntries((await allProgress()).map((p) => [p.bookId, p])))
     const last = (await db.settings.get('lastSyncDoc'))?.value as { books: Record<string, SyncBook> } | undefined
     const local = new Set(list.map((b) => b.id))
-    setCloud(Object.values(last?.books ?? {}).filter((b) => !b.deleted && b.driveFileId && !local.has(b.id)))
+    setCloud(Object.values(last?.books ?? {}).filter((b) => !b.deleted && (b.driveFileId || b.driveCopyId) && !local.has(b.id)))
   }, [])
 
   useEffect(() => {
@@ -42,7 +42,11 @@ export function LibraryScreen({ onImport }: { onImport: () => void }) {
   }, [books, q])
 
   const download = async (b: SyncBook) => {
-    const id = await importer.run([{ name: b.title, source: 'drive', driveFileId: b.driveFileId, get: () => drive.download(b.driveFileId!) }])
+    // a book picked from the user's Drive is fetched from there; one imported from a file comes from the app's copy
+    const fileId = b.driveFileId ?? b.driveCopyId!
+    const id = await importer.run([
+      { name: b.title, source: b.driveFileId ? 'drive' : 'local', driveFileId: b.driveFileId, driveCopyId: b.driveCopyId, get: () => drive.download(fileId) },
+    ])
     if (id) navigate({ name: 'reader', bookId: id })
   }
 

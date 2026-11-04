@@ -18,7 +18,7 @@ const SYNCED_SETTINGS: Array<keyof Settings> = [
 export async function collectLocal(db: LumenDB, settings?: SettingsBridge): Promise<SyncDoc> {
   const doc = emptySyncDoc()
   for (const b of await db.books.toArray()) {
-    doc.books[b.id] = { id: b.id, title: b.title, type: b.type, driveFileId: b.driveFileId, cover: b.cover, updatedAt: b.updatedAt }
+    doc.books[b.id] = { id: b.id, title: b.title, type: b.type, driveFileId: b.driveFileId, driveCopyId: b.driveCopyId, cover: b.cover, updatedAt: b.updatedAt }
   }
   const deleted = ((await db.settings.get('deletedBooks'))?.value as Record<string, number> | undefined) ?? {}
   for (const [id, at] of Object.entries(deleted)) {
@@ -50,7 +50,15 @@ export async function applyToLocal(db: LumenDB, merged: SyncDoc, settings?: Sett
         await db.content.delete(b.id)
         await db.audio.where('bookId').equals(b.id).delete()
       } else if (!b.deleted && b.updatedAt > local.updatedAt) {
-        await db.books.update(b.id, { title: b.title, updatedAt: b.updatedAt, driveFileId: local.driveFileId ?? b.driveFileId })
+        await db.books.update(b.id, {
+          title: b.title,
+          updatedAt: b.updatedAt,
+          driveFileId: local.driveFileId ?? b.driveFileId,
+          driveCopyId: b.driveCopyId ?? local.driveCopyId,
+        })
+      } else if (!b.deleted && b.driveCopyId && !local.driveCopyId) {
+        // another device already copied this book's file to Drive: don't upload it again
+        await db.books.update(b.id, { driveCopyId: b.driveCopyId })
       }
     }
     const deletedMap = ((await db.settings.get('deletedBooks'))?.value as Record<string, number> | undefined) ?? {}

@@ -8,6 +8,8 @@ export interface BookRow {
   type: 'epub' | 'pdf'
   source: 'local' | 'drive'
   driveFileId?: string
+  /** copy of the file in the hidden appDataFolder (books imported from a local file), so other devices can download it */
+  driveCopyId?: string
   size: number
   addedAt: number
   lastOpenedAt: number

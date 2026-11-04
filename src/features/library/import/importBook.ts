@@ -45,7 +45,7 @@ const baseName = (name: string) => name.replace(/\.(pdf|epub)$/i, '').replace(/[
 export async function importBook(
   blob: Blob,
   name: string,
-  opts: { source?: 'local' | 'drive'; driveFileId?: string; onProgress?: (f: number) => void } = {},
+  opts: { source?: 'local' | 'drive'; driveFileId?: string; driveCopyId?: string; onProgress?: (f: number) => void } = {},
 ): Promise<string> {
   const buf = await blob.arrayBuffer()
   const type = detectType(buf, name, blob.type)
@@ -61,6 +61,7 @@ export async function importBook(
     type,
     source: opts.source ?? 'local',
     driveFileId: opts.driveFileId,
+    ...(opts.driveCopyId ? { driveCopyId: opts.driveCopyId } : {}),
     size: blob.size,
     addedAt: now,
     lastOpenedAt: now,

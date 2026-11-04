@@ -101,7 +101,8 @@ How it's used:
   chosen files back to the app and closes itself. Allow pop‑ups for the site if the browser blocks it.
 - **`drive.file`** — the Google Picker lets you choose EPUB/PDF files; the app can then download only those files.
   Books imported from Drive appear on your other devices under *On your other devices* (tap to download).
-- **`drive.appdata`** — a hidden, app‑private `sync.json` holding progress, bookmarks, highlights and settings.
+- **`drive.appdata`** — a hidden, app‑private `sync.json` holding progress, bookmarks, highlights and settings,
+  plus prepared audio and copies of books imported from **Files**, so those books also appear under *On your other devices*.
   Sync runs when the app opens, on pause, every 60 s while playing, and when the app goes to the background.
 - The access token lasts ~1 hour and is kept in `localStorage`. When it expires the Library shows
   *"Sync is paused. Tap to reconnect"* — tapping re-authorizes with a quick popup (no password prompt).
@@ -195,7 +196,7 @@ tests/
   unit/             Vitest, mirrors src/ (engine/, session/, sync/, features/)
   e2e/              Playwright (fake voice)
   fixtures/         sample EPUB, text PDF, scanned PDF
-docs/               PLAN.md, PROGRESS.md, DECISIONS.md
+docs/               PLAN.md, PROGRESS.md, DECISIONS.md, IDEAS.md
 ```
 Imports use the `@/` alias (`@/engine/voice/player/player`). Lint rules keep `engine/` free of React and app
 layers, and keep `data/` and `sync/` free of screens.

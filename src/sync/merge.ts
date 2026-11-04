@@ -6,6 +6,8 @@ export interface SyncBook {
   title: string
   type: 'epub' | 'pdf'
   driveFileId?: string
+  /** the book file's copy in the appDataFolder (see sync/bookCopies.ts) */
+  driveCopyId?: string
   cover?: string
   updatedAt: number
   deleted?: boolean
@@ -35,6 +37,20 @@ function mergeMap<T extends { updatedAt: number }>(a: Record<string, T>, b: Reco
   return out
 }
 
+/** Like mergeMap, but where the winner has no Drive file id the other side's is kept (they never conflict). */
+function mergeBooks(a: Record<string, SyncBook>, b: Record<string, SyncBook>): Record<string, SyncBook> {
+  const out = mergeMap(a, b)
+  for (const [k, v] of Object.entries(out)) {
+    if (v.deleted) continue
+    const other = v === a[k] ? b[k] : a[k]
+    if (!other || other.deleted) continue
+    if ((!v.driveFileId && other.driveFileId) || (!v.driveCopyId && other.driveCopyId)) {
+      out[k] = { ...v, driveFileId: v.driveFileId ?? other.driveFileId, driveCopyId: v.driveCopyId ?? other.driveCopyId }
+    }
+  }
+  return out
+}
+
 /** Per-record last-write-wins merge on updatedAt; deletes are tombstones so they win too. */
 export function mergeSyncDocs(a: SyncDoc, b: SyncDoc): SyncDoc {
   const settings =
@@ -42,7 +58,7 @@ export function mergeSyncDocs(a: SyncDoc, b: SyncDoc): SyncDoc {
   return {
     version: 1,
     updatedAt: Math.max(a.updatedAt, b.updatedAt),
-    books: mergeMap(a.books, b.books),
+    books: mergeBooks(a.books, b.books),
     progress: mergeMap(a.progress, b.progress),
     bookmarks: mergeMap(a.bookmarks, b.bookmarks),
     highlights: mergeMap(a.highlights, b.highlights),

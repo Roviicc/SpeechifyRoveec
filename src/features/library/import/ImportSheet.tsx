@@ -8,7 +8,7 @@ import { drive, syncSoon } from '@/sync/syncService'
 
 export function useImporter() {
   const [busy, setBusy] = useState<string | null>(null)
-  const run = async (files: Array<{ name: string; get: () => Promise<Blob>; source?: 'local' | 'drive'; driveFileId?: string }>) => {
+  const run = async (files: Array<{ name: string; get: () => Promise<Blob>; source?: 'local' | 'drive'; driveFileId?: string; driveCopyId?: string }>) => {
     let last: string | null = null
     for (const f of files) {
       setBusy(`Importing “${f.name}”…`)
@@ -17,6 +17,7 @@ export function useImporter() {
         last = await importBook(blob, f.name, {
           source: f.source,
           driveFileId: f.driveFileId,
+          driveCopyId: f.driveCopyId,
           onProgress: (p) => setBusy(`Reading “${f.name}”… ${Math.round(p * 100)}%`),
         })
       } catch (e) {

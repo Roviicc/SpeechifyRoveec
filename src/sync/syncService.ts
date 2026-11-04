@@ -5,6 +5,7 @@ import { settingsSnapshot, useSettings } from '@/state/settings'
 import { DriveAuthError, GoogleDriveClient } from '@/sync/drive/client'
 import { driveConfigured, forgetToken, getToken, hasValidToken, isConnected, NeedsSignIn } from '@/sync/drive/google'
 import { syncOnce, type SettingsBridge } from './syncCore'
+import { syncBookCopies } from './bookCopies'
 
 export interface SyncStatus {
   status: 'off' | 'idle' | 'syncing' | 'error' | 'signin'
@@ -56,6 +57,7 @@ export function syncNow(interactive = false): Promise<void> {
       notifyChange()
       if (changedProgress.length) progressListeners.forEach((fn) => fn(changedProgress))
       syncedListeners.forEach((fn) => fn())
+      void copyBooks()
     } catch (e) {
       if (e instanceof DriveAuthError || e instanceof NeedsSignIn) {
         forgetToken()
@@ -66,6 +68,29 @@ export function syncNow(interactive = false): Promise<void> {
     running = null
   })
   return running
+}
+
+let copying: Promise<void> | null = null
+/**
+ * Copy books imported from local files into Drive so other devices can download them (and drop copies of deleted
+ * books). Runs beside sync, not inside it, so a big upload doesn't hold up progress syncing; after an upload a sync
+ * publishes the copy's id.
+ */
+function copyBooks(): Promise<void> {
+  copying ??= (async () => {
+    try {
+      const { uploaded } = await syncBookCopies(db, drive)
+      if (uploaded.length) syncSoon(500)
+    } catch (e) {
+      if (e instanceof DriveAuthError || e instanceof NeedsSignIn) {
+        forgetToken()
+        useSync.setState({ status: 'signin' })
+      } else console.warn('Copying books to Google Drive failed; will retry on the next sync', e)
+    }
+  })().finally(() => {
+    copying = null
+  })
+  return copying
 }
 
 let soon: ReturnType<typeof setTimeout> | null = null

@@ -6,8 +6,8 @@ import { getProgress } from '@/data/repo'
 import { onRemoteProgress } from '@/sync/syncService'
 
 /**
- * The "Continue from …?" offer: set when a book opens with saved progress or when progress for
- * this book arrives from another device; cleared as soon as playback starts.
+ * The "Continue from …?" offer: set when reading progress for this book arrives from another device (not on opening:
+ * the book already opens at the saved place); cleared as soon as playback starts.
  */
 export function useResumeOffer(bookId: string) {
   const [resume, setResume] = useState<ProgressRow | null>(null)
@@ -36,5 +36,5 @@ export function useResumeOffer(bookId: string) {
     setResume(null)
   }
 
-  return { resume, offer: setResume, accept, dismiss: () => setResume(null) }
+  return { resume, accept, dismiss: () => setResume(null) }
 }

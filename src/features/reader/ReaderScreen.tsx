@@ -7,6 +7,7 @@ import type { HighlightColor, HighlightRow } from '@/data/db'
 import { updateHighlight } from '@/data/repo'
 import { syncSoon } from '@/sync/syncService'
 import { PlayerBar } from '@/features/reader/player/PlayerBar'
+import { FloatingPlayButton } from '@/features/reader/player/FloatingPlayButton'
 import { ReflowView } from '@/features/reader/views/ReflowView'
 import { NoteEditSheet, NotesSheet, SearchSheet, SleepSheet, SpeedSheet, TextSettingsSheet, TocSheet } from '@/features/reader/sheets'
 import { SelectionToolbar, type SelectionInfo } from '@/features/reader/highlight/SelectionToolbar'
@@ -40,7 +41,7 @@ export function ReaderScreen({ bookId }: { bookId: string }) {
   const setSettings = useSettings((s) => s.set)
 
   const resume = useResumeOffer(bookId)
-  const { book, doc, file, error, index } = useBookLoader(bookId, resume.offer)
+  const { book, doc, file, error, index } = useBookLoader(bookId)
   const notes = useNotes(bookId, index)
   useReaderShortcuts(setPanel)
   const full = useFullscreen()
@@ -168,13 +169,15 @@ export function ReaderScreen({ bookId }: { bookId: string }) {
           </button>
         )}
 
+        {/* full screen: play / pause bottom right, the exit button just above it */}
+        {doc && full.on && <FloatingPlayButton className="absolute right-4 bottom-4 z-10" />}
         {doc && (
           <button
             onClick={full.toggle}
             aria-label={full.on ? 'Exit full screen' : 'Full screen'}
             aria-pressed={full.on}
             data-testid="fullscreen-button"
-            className="absolute right-4 bottom-4 z-10 grid h-12 w-12 place-items-center rounded-full border border-line bg-bg shadow-[var(--shadow)] hover:bg-surface"
+            className={`absolute z-10 grid h-12 w-12 place-items-center rounded-full border border-line bg-bg shadow-[var(--shadow)] hover:bg-surface ${full.on ? 'right-5 bottom-[84px]' : 'right-4 bottom-4'}`}
           >
             {full.on ? <Minimize size={20} /> : <Maximize size={20} />}
           </button>

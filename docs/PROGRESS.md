@@ -101,3 +101,11 @@ appDataFolder after a sync and listed on other devices under "On your other devi
 (6 new in `tests/unit/sync/bookCopies.test.ts`).
 
 Needs a human: import a book from a file on the PC, then check that it appears on the phone and downloads.
+
+## 2026-11-04 — Reader: no Continue offer on opening, play / pause in full screen
+- Opening a book no longer shows "Continue from …?": it already opens at the saved place, and the highlight shows it.
+  The offer still appears when newer progress arrives from another device.
+- Full screen keeps a round play / pause button bottom right; the exit-full-screen button sits just above it.
+- Long-press (Lumen selection): the toolbar (colours, Copy, Look up) now shows as soon as the word is selected, 0.45 s
+  into the hold, instead of only after the finger is lifted; it hides while dragging to more words and returns on
+  release. With "Android" selection the menu is Android's own (phone setting: Accessibility → Touch & hold delay).

@@ -55,6 +55,16 @@ export async function setTheme(page: Page, theme: 'light' | 'dark' | 'sepia') {
 }
 
 /** Real touch long-press + drag (Chrome DevTools protocol), as a finger would do on a phone. */
+/** Touch and hold without lifting the finger; returns a function that lifts it. */
+export async function touchHold(page: Page, at: { x: number; y: number }) {
+  const cdp = await page.context().newCDPSession(page)
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: at.x, y: at.y }] })
+  return async () => {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+    await cdp.detach()
+  }
+}
+
 export async function longPressDrag(page: Page, from: { x: number; y: number }, to: { x: number; y: number }) {
   const cdp = await page.context().newCDPSession(page)
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: from.x, y: from.y }] })

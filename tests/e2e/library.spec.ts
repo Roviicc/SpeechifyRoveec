@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { importFile, longPressDrag, playerInfo, sentenceHighlight, setTheme, shot } from './helpers'
+import { importFile, longPressDrag, playerInfo, sentenceHighlight, setTheme, shot, touchHold } from './helpers'
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/?tts=fake')
@@ -93,6 +93,12 @@ test('bookmarks, highlights with notes, search in book', async ({ page }, info) 
     pts.from = again.from
     pts.to = again.to
     await page.waitForTimeout(300)
+    // holding a word shows the toolbar while the finger is still down (no need to lift it first)
+    const lift = await touchHold(page, pts.from)
+    await expect(page.getByTestId('selection-toolbar')).toBeVisible({ timeout: 1000 })
+    await expect(page.getByTestId('lookup')).toBeVisible()
+    await lift()
+    await expect(page.getByTestId('selection-toolbar')).toBeVisible()
     await longPressDrag(page, pts.from, pts.to)
     expect(await page.evaluate(() => window.getSelection()?.isCollapsed ?? true)).toBe(true)
   } else {

@@ -82,7 +82,8 @@ function describe(index: BookIndex, surface: TextSurface, a: Word, b: Word): Sel
 /**
  * Current text selection in the reader.
  * - Mouse/trackpad, or phones set to "Android selection": the browser's own selection (selectionchange).
- * - Touch: long-press selects a word, keep holding and drag to extend word by word, release to show the toolbar.
+ * - Touch: long-press selects a word and shows the toolbar at once; keep holding and drag to extend word by word
+ *   (the toolbar hides while dragging and comes back on release).
  *   Native selection is turned off on the container, so Android's menu and Chrome's Touch to Search never appear.
  */
 export function useReaderSelection(container: HTMLElement | null, surface: TextSurface | null, index: BookIndex | null) {
@@ -140,6 +141,7 @@ export function useReaderSelection(container: HTMLElement | null, surface: TextS
     let startX = 0
     let startY = 0
     let anchor: Word | null = null
+    let last: Word | null = null
     let dragging = false
 
     const pointWord = (x: number, y: number) => {
@@ -157,11 +159,12 @@ export function useReaderSelection(container: HTMLElement | null, surface: TextS
         const w = pointWord(startX, startY)
         if (!w) return
         anchor = w
+        last = w
         dragging = true
         readerSelection.active = true
         navigator.vibrate?.(10)
-        setSel(null) // hide the toolbar while dragging
-        describe(index, surface, w, w)
+        // show the toolbar right away, while the finger is still down (it hides while dragging to more words)
+        setSel(describe(index, surface, w, w))
       }, LONG_PRESS_MS)
     }
     const onMove = (e: TouchEvent) => {
@@ -172,7 +175,11 @@ export function useReaderSelection(container: HTMLElement | null, surface: TextS
       }
       e.preventDefault() // extend the selection instead of scrolling
       const w = pointWord(t.clientX, t.clientY)
-      if (w && anchor) describe(index, surface, anchor, w)
+      if (!w || !anchor) return
+      if (last && w.block === last.block && w.start === last.start) return
+      last = w
+      setSel(null) // hide the toolbar while extending; it comes back on release
+      describe(index, surface, anchor, w)
     }
     const onEnd = (e: TouchEvent) => {
       clearTimeout(timer)

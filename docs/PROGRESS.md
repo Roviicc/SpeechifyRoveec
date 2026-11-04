@@ -106,5 +106,6 @@ Needs a human: import a book from a file on the PC, then check that it appears o
 - Opening a book no longer shows "Continue from …?": it already opens at the saved place, and the highlight shows it.
   The offer still appears when newer progress arrives from another device.
 - Full screen keeps a round play / pause button bottom right; the exit-full-screen button sits just above it.
-- Long-press delay: with "Selecting text on phones: Android" the selection and menu are Android's own, so the page can't
-  change their timing (phone setting: Accessibility → Touch & hold delay). Lumen's own selection triggers at 0.45 s.
+- Long-press (Lumen selection): the toolbar (colours, Copy, Look up) now shows as soon as the word is selected, 0.45 s
+  into the hold, instead of only after the finger is lifted; it hides while dragging to more words and returns on
+  release. With "Android" selection the menu is Android's own (phone setting: Accessibility → Touch & hold delay).

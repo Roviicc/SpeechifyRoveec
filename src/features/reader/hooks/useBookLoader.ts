@@ -2,16 +2,16 @@ import { useEffect, useState } from 'react'
 import { session } from '@/session/session'
 import type { BookDoc } from '@/engine/book/types'
 import type { BookIndex } from '@/engine/book/bookIndex'
-import type { BookRow, ProgressRow } from '@/data/db'
+import type { BookRow } from '@/data/db'
 import { getBook, getContent, getFile, getProgress, getStaleContent, remapPositions, touchBook } from '@/data/repo'
 import { reparseBook } from '@/features/library/import/importBook'
 
 /**
  * Loads a book (row, parsed content, original file for PDFs), opens it in the playback session
- * and tracks the session's sentence index. `onResumeOffer` is called with the saved progress when
- * the reader should offer to continue from it.
+ * and tracks the session's sentence index. The session opens at the saved place (the highlight shows it), so there is
+ * no "Continue from …?" offer on opening.
  */
-export function useBookLoader(bookId: string, onResumeOffer: (p: ProgressRow) => void) {
+export function useBookLoader(bookId: string) {
   const [book, setBook] = useState<BookRow | null>(null)
   const [doc, setDoc] = useState<BookDoc | null>(null)
   const [file, setFile] = useState<Blob | null>(null)
@@ -39,7 +39,6 @@ export function useBookLoader(bookId: string, onResumeOffer: (p: ProgressRow) =>
         setDoc(content)
         setFile(blob)
         session().open({ id: row.id, title: row.title, cover: row.cover, doc: content, persist: true }, session().book?.id === row.id ? undefined : progress?.locator)
-        if (progress && progress.percent > 0.001 && !session().player.isActive) onResumeOffer(progress)
         void touchBook(bookId)
       } catch (e) {
         if (!cancelled) setError((e as Error).message)
@@ -48,7 +47,7 @@ export function useBookLoader(bookId: string, onResumeOffer: (p: ProgressRow) =>
     return () => {
       cancelled = true
     }
-  }, [bookId, onResumeOffer])
+  }, [bookId])
 
   useEffect(() => session().onIndex(setIndex), [])
 

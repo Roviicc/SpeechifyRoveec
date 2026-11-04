@@ -167,7 +167,6 @@ test('EPUB: images, inline formatting and structure; taps and highlights stay ex
   await setTheme(page, 'dark')
   await page.reload()
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
-  await page.getByRole('button', { name: 'Start from the beginning' }).click()
   await page.locator('.blk-quote').scrollIntoViewIfNeeded()
   await shot(page, info, 'epub-structure-dark')
   await page.locator('.blk-row').last().scrollIntoViewIfNeeded()
@@ -177,7 +176,7 @@ test('EPUB: images, inline formatting and structure; taps and highlights stay ex
   await shot(page, info, 'epub-image-dark')
 })
 
-test('resume after reload offers to continue', async ({ page }) => {
+test('reopening a book goes straight to the saved place, no Continue offer', async ({ page }) => {
   await importFile(page, 'alice.epub')
   await page.getByTestId('play-pause').click()
   await expect.poll(() => playerInfo(page).then((p) => p.index), { timeout: 10_000 }).toBeGreaterThanOrEqual(1)
@@ -188,12 +187,12 @@ test('resume after reload offers to continue', async ({ page }) => {
   const idx = (await playerInfo(page)).index
   await page.waitForTimeout(300)
   await page.reload()
-  await expect(page.getByTestId('resume-banner')).toBeVisible()
-  await expect(page.getByTestId('resume-banner')).toContainText('Down the Rabbit-Hole')
-  expect((await playerInfo(page)).index).toBe(idx)
-  await page.getByTestId('resume-continue').click()
+  await expect(page.getByTestId('reader-text')).toBeVisible()
+  await expect.poll(() => playerInfo(page).then((p) => p.index)).toBe(idx)
+  await expect(page.getByTestId('resume-banner')).toHaveCount(0)
+  await page.getByTestId('play-pause').click()
   await expect.poll(() => playerInfo(page).then((p) => p.state)).toBe('playing')
-  await expect(page.getByTestId('resume-banner')).toBeHidden()
+  expect((await playerInfo(page)).index).toBeGreaterThanOrEqual(idx)
 })
 
 test('PDF: original + text mode, smart skip, zoom', async ({ page }, info) => {
